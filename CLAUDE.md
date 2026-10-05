@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A multi-agent clinical decision support system (CDSS) implementing Borkowski et al. (2025), "Multiagent AI Systems in Health Care" (PMC12360800), as a B.Tech capstone. Requirements live in `MedOrchestra_PRD(1).pdf`. Synthetic/open data only — no EHR/FHIR, no clinical deployment. Scope is intentionally capped at **4 agents** (Triage, Diagnostician, Drug Safety, Critique; `report` is an assembly node, not an agent). The Critique agent and its feedback loop are the paper's novel contribution.
 
-Work proceeds in phases; the roadmap and per-phase status are in `README.md`. Phases 1–2 are done: Triage (NEWS2 + LLM) and Drug Safety (DDInter + RxNorm + LLM) are real. The Diagnostician still reads `backend/app/agents/placeholder_data.py` (throwaway, replaced in Phase 3), and the Critique is deterministic checks only until Phase 4.
+Work proceeds in phases; the roadmap and per-phase status are in `README.md`. Phases 1–3 are done: Triage (NEWS2 + LLM), Drug Safety (DDInter + RxNorm + LLM) and the Diagnostician (PubMed retrieval + LLM + ICD-11) are real. The Critique is deterministic checks only until Phase 4.
 
 ## Commands
 
@@ -14,12 +14,14 @@ Windows dev machine. Python uses the venv at `backend/.venv`; Node was installed
 
 ```powershell
 # backend/
-.\.venv\Scripts\python -m pip install -e ".[dev]"
+.\.venv\Scripts\python -m pip install -e ".[dev,ml]" --extra-index-url https://download.pytorch.org/whl/cpu
 .\.venv\Scripts\python -m pytest -q                                  # all tests
 .\.venv\Scripts\python -m pytest tests/test_graph.py::test_low_confidence_reroutes_exactly_once
 .\.venv\Scripts\ruff check . ; .\.venv\Scripts\ruff format .
 .\.venv\Scripts\python -m uvicorn app.main:app --reload --port 8000
 .\.venv\Scripts\python -m pipelines.download_ddinter    # into backend/data/ddinter (gitignored, CC BY-NC-SA)
+.\.venv\Scripts\python -m pipelines.migrate             # apply backend/migrations/*.sql (idempotent)
+.\.venv\Scripts\python -m pipelines.ingest_pubmed --limit 5000   # resumable; state in backend/data/pubmed
 
 # frontend/
 npm run dev      # http://localhost:3000, expects API at NEXT_PUBLIC_API_URL (default http://localhost:8000)
@@ -46,9 +48,19 @@ npm run build
 
 **Safety rules in agents:** Triage urgency = max(NEWS2, LLM). The LLM may escalate but never downgrade. Without an LLM, the red-flag phrase rules (`agents/red_flags.py`) escalate to HIGH, so classic ACS with normal vitals is never LOW. Drug interaction severity always comes from DDInter. The LLM only writes `explanation`/`clinical_action` (`explanation_source="llm"`) and only for graded pairs, never for `unknown` ones.
 
+**Diagnostician** (`agents/diagnostician.py`) runs four steps:
+1. The LLM proposes up to 5 hypotheses, each with a PubMed query. On a re-route, the critique's flags and questions are added to both prompts.
+2. The case query plus every hypothesis query go to `services/retrieval.py`. That encodes them with the MedCPT query encoder, calls the `hybrid_search` SQL function per query (pgvector `<#>` inner product + full-text with OR'd terms, RRF-fused), and pools candidates round-robin capped at `rerank_pool`. The cross-encoder scores each candidate against the query that found it, and `evidence_k` abstracts are kept round-robin across queries.
+3. The LLM picks the top 3 citing `[E#]` ids only. Ids not in the retrieved list are dropped in code.
+4. ICD-11 codes are looked up via `services/icd.py`. WHO's `autocode` returns 500 on release 2026-01, so it uses `search` + a qualifier rule ("Dengue fever" must not become "Severe dengue"), with `autocode` on 2025-01 as the fallback.
+
+Without an LLM there is no differential (empty list). Without retrieval, the diagnoses are uncited.
+- Database code is **sync psycopg in `asyncio.to_thread`**, because psycopg async does not work on the Windows Proactor loop. MedCPT inference shares that thread and holds a lock. `pubmed_chunks` stores `halfvec(768)` to fit the Supabase free tier. RLS is on (the backend connects as the owner).
+- CPU costs on the dev laptop (i5-1235U): article embedding ~5–8/s with length-sorted batches (unsorted padding made it 2.4/s), and the cross-encoder ~0.15 s/doc. Int8 quantization was rejected (0.94 cosine to fp32).
+
 **Drug data** (`services/drug_graph.py`, `services/drug_names.py`): an undirected graph of 1,939 drugs and 160K pairs. Duplicate pairs across DDInter's per-ATC files keep the most severe graded level. DDInter has no mechanism text and mixes INN/USAN names (`acetylsalicylic acid` but `salbutamol`), so names resolve via exact → synonym groups → RxNorm (`approximateTerm` score ≥ 7, then ingredients, which handles brands and combination products) → fuzzy.
 
-**Tests** (`tests/conftest.py`) set env vars before importing app modules, which override `backend/.env`: no Groq key, no LLM cache, no RxNorm, `DDINTER_DIR=tests/fixtures/ddinter`. Tests never touch the network. Use the `fake_llm({SchemaName: response | callable | exception})` fixture to script LLM replies. Agents can be called directly (outside a graph run, stream events are dropped).
+**Tests** (`tests/conftest.py`) set env vars before importing app modules, which override `backend/.env`: no Groq key, LLM cache, RxNorm, `DATABASE_URL` or ICD credentials, and `DDINTER_DIR=tests/fixtures/ddinter`. Tests never touch the network. Use the `fake_llm({SchemaName: response | callable | exception})` and `fake_retriever(evidence | exception)` fixtures; `make_evidence()` builds `Evidence` rows. Agents can be called directly (outside a graph run, stream events are dropped).
 
 ## Decided stack deviations from the PRD
 

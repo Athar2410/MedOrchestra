@@ -1,6 +1,6 @@
 import type { CaseInput, RunEvent } from "./types";
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
 export async function createCase(input: CaseInput): Promise<string> {
   const res = await fetch(`${API_URL}/api/cases`, {

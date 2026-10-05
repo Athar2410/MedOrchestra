@@ -42,12 +42,15 @@ export interface Citation {
   title: string;
   url: string | null;
   snippet: string | null;
+  journal: string | null;
+  year: number | null;
 }
 
 export interface Diagnosis {
   condition: string;
   confidence: number;
   icd11_code: string | null;
+  icd11_title: string | null;
   rationale: string;
   citations: Citation[];
 }

@@ -11,7 +11,7 @@ import type { AgentName, Critique, Diagnosis, DrugInteraction, TriageResult } fr
 
 const AGENT_META: Record<AgentName, { label: string; role: string }> = {
   triage: { label: "Triage", role: "NEWS2 + red-flag assessment → urgency" },
-  diagnostician: { label: "Diagnostician", role: "Evidence-based differential diagnosis" },
+  diagnostician: { label: "Diagnostician", role: "PubMed-grounded differential diagnosis" },
   drug_safety: { label: "Drug Safety", role: "Drug–drug interaction screening" },
   critique: { label: "Critique", role: "Adversarial review of the differential" },
   report: { label: "Report", role: "Final clinical summary" },
@@ -35,7 +35,10 @@ function summarize(agent: AgentName, output: Record<string, unknown>): string {
     }
     case "diagnostician": {
       const d = output.diagnoses as Diagnosis[];
-      return d.map((x) => `${x.condition} (${Math.round(x.confidence * 100)}%)`).join(" · ");
+      const evidence = (output.evidence as unknown[] | undefined)?.length ?? 0;
+      if (!d.length) return "No differential produced";
+      const list = d.map((x) => `${x.condition} (${Math.round(x.confidence * 100)}%)`).join(" · ");
+      return `${list} · ${evidence} abstract(s)`;
     }
     case "drug_safety": {
       const i = output.drug_interactions as DrugInteraction[];

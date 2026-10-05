@@ -7,6 +7,7 @@ from app.schemas import (
     Critique,
     Diagnosis,
     DrugInteraction,
+    Evidence,
     MedicationMatch,
     TriageResult,
 )
@@ -22,6 +23,8 @@ class ClinicalState(TypedDict, total=False):
     case: CaseInput
     triage: TriageResult
     diagnoses: list[Diagnosis]
+    # PubMed abstracts the Diagnostician retrieved (latest attempt); read by the Critique.
+    evidence: list[Evidence]
     drug_interactions: list[DrugInteraction]
     medication_matches: list[MedicationMatch]
     critique: Critique

@@ -48,12 +48,32 @@ class Citation(BaseModel):
     title: str
     url: str | None = None
     snippet: str | None = None
+    journal: str | None = None
+    year: int | None = None
+
+
+class Evidence(BaseModel):
+    """A retrieved PubMed abstract, as shown to the Diagnostician LLM."""
+
+    pmid: int
+    title: str
+    abstract: str
+    journal: str | None = None
+    pub_year: int | None = None
+    # The search query that retrieved it and its MedCPT cross-encoder score (higher = better).
+    query: str
+    score: float
+
+    @property
+    def url(self) -> str:
+        return f"https://pubmed.ncbi.nlm.nih.gov/{self.pmid}/"
 
 
 class Diagnosis(BaseModel):
     condition: str
     confidence: float = Field(ge=0, le=1)
     icd11_code: str | None = None
+    icd11_title: str | None = None
     rationale: str
     citations: list[Citation] = Field(default_factory=list)
 

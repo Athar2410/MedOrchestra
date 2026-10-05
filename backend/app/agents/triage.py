@@ -3,6 +3,7 @@ import logging
 from pydantic import BaseModel
 
 from app.agents.base import AgentContext, agent_node
+from app.agents.case_text import describe_patient, describe_vitals
 from app.agents.news2 import score_news2, urgency_from_news2
 from app.agents.red_flags import find_red_flags
 from app.graph.state import ClinicalState
@@ -38,24 +39,10 @@ class TriageAssessment(BaseModel):
 
 
 def _case_prompt(case: CaseInput, news2: int, news2_urgency: Urgency, missing: list[str]) -> str:
-    v = case.vitals
-    vitals = {
-        "heart_rate": v.heart_rate,
-        "blood_pressure": f"{v.systolic_bp}/{v.diastolic_bp}" if v.systolic_bp else None,
-        "respiratory_rate": v.respiratory_rate,
-        "spo2": v.spo2,
-        "temperature_c": v.temperature_c,
-        "consciousness_acvpu": v.consciousness,
-        "on_supplemental_o2": v.on_supplemental_o2,
-    }
-    recorded = ", ".join(f"{k}={val}" for k, val in vitals.items() if val is not None)
-    demographics = ", ".join(
-        part for part in (f"{case.age}y" if case.age is not None else "", case.sex or "") if part
-    )
     return (
-        f"Patient: {demographics or 'not stated'}\n"
+        f"Patient: {describe_patient(case)}\n"
         f"Chief complaint: {case.chief_complaint}\n"
-        f"Vitals: {recorded}\n"
+        f"Vitals: {describe_vitals(case)}\n"
         f"Not recorded: {', '.join(missing) or 'none'}\n"
         f"NEWS2 score: {news2} (NEWS2 urgency: {news2_urgency})"
     )

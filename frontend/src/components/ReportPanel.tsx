@@ -125,36 +125,53 @@ export function ReportPanel({ report }: { report: ClinicalReport }) {
 
       <div className="space-y-6 p-5">
         <Section title="Differential diagnoses">
-          <ol className="space-y-3">
+          {report.diagnoses.length === 0 && (
+            <p className="text-sm text-zinc-500">
+              No differential could be produced (the language model was unavailable).
+            </p>
+          )}
+          <ol className="space-y-4">
             {report.diagnoses.map((d, i) => (
               <li key={d.condition}>
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="font-medium">
                     {i + 1}. {d.condition}
-                    {d.icd11_code && (
-                      <span className="ml-2 font-mono text-xs text-zinc-500">ICD-11 {d.icd11_code}</span>
-                    )}
                   </span>
                   <span className="text-sm tabular-nums text-zinc-500">{pct(d.confidence)}</span>
                 </div>
+                {d.icd11_code && (
+                  <p className="font-mono text-xs text-zinc-500" title={d.icd11_title ?? undefined}>
+                    ICD-11 {d.icd11_code}
+                    {d.icd11_title && <span className="font-sans"> · {d.icd11_title}</span>}
+                  </p>
+                )}
                 <div className="mt-1 h-2 rounded-full bg-zinc-100 dark:bg-zinc-800">
                   <div className="h-2 rounded-full bg-teal-500" style={{ width: pct(d.confidence) }} />
                 </div>
                 <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{d.rationale}</p>
-                {d.citations.length > 0 && (
-                  <ul className="mt-1 space-y-0.5 text-xs">
+                {d.citations.length > 0 ? (
+                  <ul className="mt-1 space-y-1 text-xs">
                     {d.citations.map((c) => (
-                      <li key={c.id}>
-                        {c.url ? (
-                          <a href={c.url} target="_blank" rel="noreferrer" className="text-teal-700 underline dark:text-teal-400">
-                            {c.title}
-                          </a>
-                        ) : (
-                          c.title
-                        )}
+                      <li key={c.id} className="leading-snug">
+                        <a
+                          href={c.url ?? `https://pubmed.ncbi.nlm.nih.gov/${c.id}/`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-teal-700 underline decoration-teal-700/30 hover:decoration-teal-700 dark:text-teal-400"
+                        >
+                          {c.title}
+                        </a>
+                        <span className="text-zinc-400">
+                          {" "}
+                          — {[c.journal, c.year].filter(Boolean).join(", ")} · PMID {c.id}
+                        </span>
                       </li>
                     ))}
                   </ul>
+                ) : (
+                  <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                    No supporting PubMed evidence cited.
+                  </p>
                 )}
               </li>
             ))}
