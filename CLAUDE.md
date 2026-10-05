@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A multi-agent clinical decision support system (CDSS) implementing Borkowski et al. (2025), "Multiagent AI Systems in Health Care" (PMC12360800), as a B.Tech capstone. Requirements live in `MedOrchestra_PRD(1).pdf`. Synthetic/open data only — no EHR/FHIR, no clinical deployment. Scope is intentionally capped at **4 agents** (Triage, Diagnostician, Drug Safety, Critique; `report` is an assembly node, not an agent). The Critique agent and its feedback loop are the paper's novel contribution.
 
-Work proceeds in phases; the roadmap and per-phase status are in `README.md`. Phase 1 (skeleton) is done: Triage uses real NEWS2, while Diagnostician and Drug Safety read `backend/app/agents/placeholder_data.py` — that file is throwaway and is replaced by real data in Phases 2–3.
+Work proceeds in phases; the roadmap and per-phase status are in `README.md`. Phases 1–2 are done: Triage (NEWS2 + LLM) and Drug Safety (DDInter + RxNorm + LLM) are real. The Diagnostician still reads `backend/app/agents/placeholder_data.py` (throwaway, replaced in Phase 3), and the Critique is deterministic checks only until Phase 4.
 
 ## Commands
 
@@ -19,6 +19,7 @@ Windows dev machine. Python uses the venv at `backend/.venv`; Node was installed
 .\.venv\Scripts\python -m pytest tests/test_graph.py::test_low_confidence_reroutes_exactly_once
 .\.venv\Scripts\ruff check . ; .\.venv\Scripts\ruff format .
 .\.venv\Scripts\python -m uvicorn app.main:app --reload --port 8000
+.\.venv\Scripts\python -m pipelines.download_ddinter    # into backend/data/ddinter (gitignored, CC BY-NC-SA)
 
 # frontend/
 npm run dev      # http://localhost:3000, expects API at NEXT_PUBLIC_API_URL (default http://localhost:8000)
@@ -40,7 +41,14 @@ npm run build
 
 **Event contract** is mirrored by hand in `frontend/src/lib/types.ts` (`RunEvent`, report schemas) — keep it in sync with `backend/app/schemas.py` and `agents/base.py`. `frontend/src/hooks/useRunStream.ts` folds events into per-agent, per-attempt UI state.
 
-**Tests** set `STUB_DELAY_SECONDS=0` in `tests/conftest.py` before importing app modules (agents read `get_settings()` directly).
+**LLM** (`backend/app/services/llm.py`): agents call `get_llm().structured(system=, user=, schema=PydanticModel, budget_seconds=)`. `get_llm()` returns `None` without `GROQ_API_KEY`, and **every agent must work in that case and when `LLMError` is raised** (rules fallback). Requests use Groq strict `json_schema` mode. `strict_schema()` converts Pydantic schemas: refs inlined, all fields required, constraint keywords stripped (Pydantic still validates them, with one repair round-trip). Each call has a wall-clock budget. The primary model gets 60% of it, then `llm_fallback_model` gets the rest. Responses are cached in SQLite keyed by the request body. Agent budgets are module constants (triage 6s, drug explanations 8s) sized for the PRD's ≤15s end-to-end target. Model IDs are config: Llama 3.3 70B is not available on this Groq account.
+- Groq quirks found live: Qwen + strict mode + `reasoning_format: "hidden"` produces garbage, so it uses `"parsed"`. Qwen strict mode also fails randomly with HTTP 400 `json_validate_failed`, which is treated as retryable. Free-tier 503s and 429s are frequent. httpx timeouts are per read, so the total is enforced with `asyncio.timeout`.
+
+**Safety rules in agents:** Triage urgency = max(NEWS2, LLM). The LLM may escalate but never downgrade. Without an LLM, the red-flag phrase rules (`agents/red_flags.py`) escalate to HIGH, so classic ACS with normal vitals is never LOW. Drug interaction severity always comes from DDInter. The LLM only writes `explanation`/`clinical_action` (`explanation_source="llm"`) and only for graded pairs, never for `unknown` ones.
+
+**Drug data** (`services/drug_graph.py`, `services/drug_names.py`): an undirected graph of 1,939 drugs and 160K pairs. Duplicate pairs across DDInter's per-ATC files keep the most severe graded level. DDInter has no mechanism text and mixes INN/USAN names (`acetylsalicylic acid` but `salbutamol`), so names resolve via exact → synonym groups → RxNorm (`approximateTerm` score ≥ 7, then ingredients, which handles brands and combination products) → fuzzy.
+
+**Tests** (`tests/conftest.py`) set env vars before importing app modules, which override `backend/.env`: no Groq key, no LLM cache, no RxNorm, `DDINTER_DIR=tests/fixtures/ddinter`. Tests never touch the network. Use the `fake_llm({SchemaName: response | callable | exception})` fixture to script LLM replies. Agents can be called directly (outside a graph run, stream events are dropped).
 
 ## Decided stack deviations from the PRD
 

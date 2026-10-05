@@ -12,7 +12,7 @@ async def report_agent(state: ClinicalState, ctx: AgentContext) -> dict:
             triage=state["triage"],
             diagnoses=state.get("diagnoses", []),
             drug_interactions=state.get("drug_interactions", []),
-            unrecognized_medications=state.get("unrecognized_medications", []),
+            medication_matches=state.get("medication_matches", []),
             critique=state["critique"],
             reroutes=state.get("reroute_count", 0),
         )

@@ -1,8 +1,7 @@
 """PHASE 1 PLACEHOLDER DATA — not clinical knowledge.
 
-Tiny hand-written tables so the pipeline runs end to end before the real
-sources exist. Replaced by the DDInter interaction graph (Phase 2) and PubMed
-retrieval-augmented diagnosis (Phase 3).
+A tiny hand-written differential table so the Diagnostician runs end to end
+before PubMed retrieval-augmented diagnosis exists (Phase 3).
 """
 
 # (any of these keywords in the complaint, candidate conditions with base confidence)
@@ -28,28 +27,3 @@ KEYWORD_DIFFERENTIALS: list[tuple[tuple[str, ...], list[tuple[str, float]]]] = [
         [("Acute asthma exacerbation", 0.68), ("COPD exacerbation", 0.45), ("Heart failure", 0.3)],
     ),
 ]
-
-# Unordered drug pairs -> (severity, mechanism)
-INTERACTIONS: dict[frozenset[str], tuple[str, str]] = {
-    frozenset({"warfarin", "aspirin"}): (
-        "major",
-        "Additive anticoagulant/antiplatelet bleeding risk",
-    ),
-    frozenset({"warfarin", "ibuprofen"}): ("major", "NSAID increases bleeding risk with warfarin"),
-    frozenset({"simvastatin", "clarithromycin"}): (
-        "major",
-        "CYP3A4 inhibition raises statin levels",
-    ),
-    frozenset({"sertraline", "tramadol"}): ("major", "Serotonin syndrome risk"),
-    frozenset({"lisinopril", "spironolactone"}): ("moderate", "Additive hyperkalaemia risk"),
-    frozenset({"metformin", "furosemide"}): ("minor", "Furosemide may raise metformin levels"),
-}
-
-KNOWN_DRUGS: set[str] = {drug for pair in INTERACTIONS for drug in pair} | {
-    "paracetamol",
-    "acetaminophen",
-    "metoprolol",
-    "amlodipine",
-    "atorvastatin",
-    "omeprazole",
-}

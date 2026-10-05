@@ -8,8 +8,8 @@ async def test_confident_case_runs_once_and_finds_interaction(chest_pain_case):
     assert report.reroutes == 0
     assert report.urgency == "HIGH"
     assert report.diagnoses[0].condition == "Acute coronary syndrome"
-    assert [(i.drug_a, i.drug_b, i.severity) for i in report.drug_interactions] == [
-        ("aspirin", "warfarin", "major")
+    assert [(i.input_a, i.drug_a, i.drug_b, i.severity) for i in report.drug_interactions] == [
+        ("aspirin 75mg od", "acetylsalicylic acid", "warfarin", "major")
     ]
     assert not report.critique.reroute_requested
     assert sum("diagnostician" in log for log in state["agent_logs"]) == 1

@@ -39,6 +39,14 @@ class AgentContext:
         self.emit("agent_thinking", message=message)
 
 
+def _stream_writer() -> Callable[[dict[str, Any]], None]:
+    # Outside a graph run (agents called directly in tests or evaluation) events are dropped.
+    try:
+        return get_stream_writer()
+    except RuntimeError:
+        return lambda _event: None
+
+
 AgentFn = Callable[[ClinicalState, AgentContext], Awaitable[dict[str, Any]]]
 
 
@@ -47,7 +55,7 @@ def agent_node(name: AgentName) -> Callable[[AgentFn], Callable[[ClinicalState],
         @functools.wraps(fn)
         async def node(state: ClinicalState) -> dict[str, Any]:
             attempt = state.get("reroute_count", 0) + 1 if name in RETRYABLE_AGENTS else 1
-            ctx = AgentContext(name, attempt, get_stream_writer())
+            ctx = AgentContext(name, attempt, _stream_writer())
             ctx.emit("agent_started")
             started = time.perf_counter()
             try:

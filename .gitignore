@@ -6,5 +6,8 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 *.egg-info/
+# Downloaded datasets (licensed separately; fetched by backend/pipelines/*)
+backend/data/
 node_modules/
 .next/
+.cache/

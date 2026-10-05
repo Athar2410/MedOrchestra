@@ -4,7 +4,8 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 Urgency = Literal["LOW", "MEDIUM", "HIGH"]
-Severity = Literal["minor", "moderate", "major"]
+# DDInter levels; "unknown" = interaction documented but not graded.
+Severity = Literal["minor", "moderate", "major", "unknown"]
 # ACVPU scale used by NEWS2: Alert, new Confusion, responds to Voice, Pain, Unresponsive.
 Consciousness = Literal["A", "C", "V", "P", "U"]
 AgentName = Literal["triage", "diagnostician", "drug_safety", "critique", "report"]
@@ -33,6 +34,10 @@ class TriageResult(BaseModel):
     urgency: Urgency
     news2_score: int
     news2_breakdown: dict[str, int]
+    news2_urgency: Urgency
+    # The LLM's own call; final urgency is max(news2_urgency, llm_urgency) — never lower.
+    llm_urgency: Urgency | None = None
+    red_flags: list[str] = Field(default_factory=list)
     missing_vitals: list[str]
     reasoning: str
     method: Literal["rules", "llm"]
@@ -53,13 +58,26 @@ class Diagnosis(BaseModel):
     citations: list[Citation] = Field(default_factory=list)
 
 
+class MedicationMatch(BaseModel):
+    input: str
+    # DDInter drug names; several for combination products (e.g. Percocet).
+    resolved: list[str]
+    method: Literal["exact", "synonym", "rxnorm", "fuzzy"] | None
+
+
 class DrugInteraction(BaseModel):
     drug_a: str
     drug_b: str
+    # Medication entries as the user typed them that resolved to drug_a / drug_b.
+    input_a: str
+    input_b: str
+    # Always from DDInter, never from the LLM.
     severity: Severity
-    mechanism: str
-    explanation: str
-    evidence: str | None = None
+    explanation: str | None = None
+    clinical_action: str | None = None
+    explanation_source: Literal["llm", "none"] = "none"
+    source: str = "DDInter 2.0"
+    source_ids: list[str] = Field(default_factory=list)
 
 
 class Critique(BaseModel):
@@ -75,7 +93,7 @@ class ClinicalReport(BaseModel):
     triage: TriageResult
     diagnoses: list[Diagnosis]
     drug_interactions: list[DrugInteraction]
-    unrecognized_medications: list[str]
+    medication_matches: list[MedicationMatch]
     critique: Critique
     reroutes: int
     generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

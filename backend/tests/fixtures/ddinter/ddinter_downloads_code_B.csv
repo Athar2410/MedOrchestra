@@ -1,0 +1,6 @@
+DDInterID_A,Drug_A,DDInterID_B,Drug_B,Level
+DDInter2,Acetylsalicylic acid,DDInter1,Warfarin,Major
+DDInter7,Furosemide,DDInter6,Metformin,Minor
+DDInter1,Warfarin,DDInter12,Acetaminophen,Minor
+DDInter13,Salbutamol,DDInter14,Propranolol,Major
+DDInter15,Metoprolol,DDInter16,Amlodipine,Unknown

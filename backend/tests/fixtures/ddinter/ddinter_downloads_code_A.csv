@@ -1,0 +1,7 @@
+DDInterID_A,Drug_A,DDInterID_B,Drug_B,Level
+DDInter1,Warfarin,DDInter2,Acetylsalicylic acid,Moderate
+DDInter1,Warfarin,DDInter3,Ibuprofen,Major
+DDInter4,Simvastatin,DDInter5,Clarithromycin,Major
+DDInter6,Metformin,DDInter7,Furosemide,Unknown
+DDInter8,Lisinopril,DDInter9,Spironolactone,Moderate
+DDInter10,Oxycodone,DDInter11,Sertraline,Moderate

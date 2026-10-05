@@ -53,7 +53,7 @@ const SAMPLES: { label: string; form: FormState }[] = [
       vitals: { heart_rate: "118", systolic_bp: "95", diastolic_bp: "60", respiratory_rate: "24", spo2: "93", temperature_c: "37.1" },
       age: "64",
       sex: "male",
-      medications: ["warfarin", "aspirin", "metoprolol"],
+      medications: ["Coumadin 5mg", "aspirin 75mg", "simvastatin 40mg", "clarithromycin"],
     },
   },
   {

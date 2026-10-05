@@ -7,6 +7,7 @@ from app.schemas import (
     Critique,
     Diagnosis,
     DrugInteraction,
+    MedicationMatch,
     TriageResult,
 )
 
@@ -22,7 +23,7 @@ class ClinicalState(TypedDict, total=False):
     triage: TriageResult
     diagnoses: list[Diagnosis]
     drug_interactions: list[DrugInteraction]
-    unrecognized_medications: list[str]
+    medication_matches: list[MedicationMatch]
     critique: Critique
     # Number of Critique -> Diagnostician re-routes so far; capped by settings.max_reroutes.
     reroute_count: int

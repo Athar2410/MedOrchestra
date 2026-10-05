@@ -10,7 +10,7 @@ import {
 import type { AgentName, Critique, Diagnosis, DrugInteraction, TriageResult } from "@/lib/types";
 
 const AGENT_META: Record<AgentName, { label: string; role: string }> = {
-  triage: { label: "Triage", role: "NEWS2 early-warning score → urgency" },
+  triage: { label: "Triage", role: "NEWS2 + red-flag assessment → urgency" },
   diagnostician: { label: "Diagnostician", role: "Evidence-based differential diagnosis" },
   drug_safety: { label: "Drug Safety", role: "Drug–drug interaction screening" },
   critique: { label: "Critique", role: "Adversarial review of the differential" },
@@ -30,7 +30,8 @@ function summarize(agent: AgentName, output: Record<string, unknown>): string {
   switch (agent) {
     case "triage": {
       const t = output.triage as TriageResult;
-      return `${t.urgency} urgency · NEWS2 ${t.news2_score}`;
+      const via = t.method === "llm" ? "AI + NEWS2" : "rules";
+      return `${t.urgency} urgency · NEWS2 ${t.news2_score} · ${via}`;
     }
     case "diagnostician": {
       const d = output.diagnoses as Diagnosis[];
@@ -38,7 +39,9 @@ function summarize(agent: AgentName, output: Record<string, unknown>): string {
     }
     case "drug_safety": {
       const i = output.drug_interactions as DrugInteraction[];
-      return i.length ? `${i.length} interaction alert(s)` : "No interactions found";
+      if (!i.length) return "No interactions found";
+      const major = i.filter((x) => x.severity === "major").length;
+      return `${i.length} interaction(s)${major ? ` · ${major} major` : ""}`;
     }
     case "critique": {
       const c = output.critique as Critique;

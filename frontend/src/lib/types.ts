@@ -1,7 +1,8 @@
 // Mirrors backend/app/schemas.py and the SSE event contract in backend/app/agents/base.py.
 
 export type Urgency = "LOW" | "MEDIUM" | "HIGH";
-export type Severity = "minor" | "moderate" | "major";
+// DDInter levels; "unknown" = interaction documented but not graded.
+export type Severity = "minor" | "moderate" | "major" | "unknown";
 export type Consciousness = "A" | "C" | "V" | "P" | "U";
 export type AgentName = "triage" | "diagnostician" | "drug_safety" | "critique" | "report";
 
@@ -28,6 +29,9 @@ export interface TriageResult {
   urgency: Urgency;
   news2_score: number;
   news2_breakdown: Record<string, number>;
+  news2_urgency: Urgency;
+  llm_urgency: Urgency | null;
+  red_flags: string[];
   missing_vitals: string[];
   reasoning: string;
   method: "rules" | "llm";
@@ -48,13 +52,23 @@ export interface Diagnosis {
   citations: Citation[];
 }
 
+export interface MedicationMatch {
+  input: string;
+  resolved: string[];
+  method: "exact" | "synonym" | "rxnorm" | "fuzzy" | null;
+}
+
 export interface DrugInteraction {
   drug_a: string;
   drug_b: string;
+  input_a: string;
+  input_b: string;
   severity: Severity;
-  mechanism: string;
-  explanation: string;
-  evidence: string | null;
+  explanation: string | null;
+  clinical_action: string | null;
+  explanation_source: "llm" | "none";
+  source: string;
+  source_ids: string[];
 }
 
 export interface Critique {
@@ -70,7 +84,7 @@ export interface ClinicalReport {
   triage: TriageResult;
   diagnoses: Diagnosis[];
   drug_interactions: DrugInteraction[];
-  unrecognized_medications: string[];
+  medication_matches: MedicationMatch[];
   critique: Critique;
   reroutes: number;
   generated_at: string;
