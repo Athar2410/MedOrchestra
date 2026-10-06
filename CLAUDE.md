@@ -89,7 +89,7 @@ An unsupported leading diagnosis caps confidence at 0.55, which forces a re-rout
 - **Latency:** single-pass cases take ~8–12 s ✅. **Re-routed cases take ~18.6 s** (down from ~23 s): ICD-11 coding now runs once in the report node, and a re-route reuses the first pass's evidence and only searches new queries. The remaining cost is the second search + rerank (~4–5 s) for the new hypotheses. Further levers trade quality (smaller `rerank_pool`) or money (a paid Groq tier, to avoid 429 retries).
 - **`min_rerank_score = -5` and `SUPPORT_THRESHOLD = 8` are provisional.** Tune both in Phase 6 against labelled relevance (PRD RAG precision ≥0.70).
 - **DDInter has gaps:** e.g. no ACE inhibitor + spironolactone pair. That limits DDI recall; document it for the paper and don't invent pairs.
-- The UI was verified in Brave via Claude-in-Chrome (Phases 3–5). The user still has to check Export PDF, because the print dialog blocks the browser tool. In Brave the extension's ref-based clicks sometimes don't register; JS `element.click()` via `javascript_tool` works.
+- The UI was verified in Brave via Claude-in-Chrome (Phases 3–5), and the user confirmed Export PDF works. Don't click Export PDF with the browser tool: the print dialog blocks it. In Brave the extension's ref-based clicks sometimes don't register; JS `element.click()` via `javascript_tool` works.
 - **Supabase space:** the corpus uses ~362 MB of 500 MB, and runs take ~112 kB each (about 1,200 runs of headroom). Prune old runs or trim stored `output` payloads if evaluation needs more.
 - **Skipped on purpose:** Langfuse tracing (the stored event stream already captures every agent step) and server-side PDF generation (browser print-to-PDF via `exportPdf()`, light mode, print CSS).
 
