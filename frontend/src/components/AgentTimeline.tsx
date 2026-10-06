@@ -48,7 +48,8 @@ function summarize(agent: AgentName, output: Record<string, unknown>): string {
     }
     case "critique": {
       const c = output.critique as Critique;
-      return `Confidence ${Math.round(c.confidence_score * 100)}% · ${c.flags.length} flag(s)${c.reroute_requested ? " · re-route requested" : ""}`;
+      const via = c.method === "llm" ? "AI review" : "rules";
+      return `Confidence ${Math.round(c.confidence_score * 100)}% (${via}) · ${c.flags.length} flag(s)${c.reroute_requested ? " · re-route requested" : ""}`;
     }
     case "report":
       return "Report ready";

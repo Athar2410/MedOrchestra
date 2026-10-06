@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A multi-agent clinical decision support system (CDSS) implementing Borkowski et al. (2025), "Multiagent AI Systems in Health Care" (PMC12360800), as a B.Tech capstone. Requirements live in `MedOrchestra_PRD(1).pdf`. Synthetic/open data only — no EHR/FHIR, no clinical deployment. Scope is intentionally capped at **4 agents** (Triage, Diagnostician, Drug Safety, Critique; `report` is an assembly node, not an agent). The Critique agent and its feedback loop are the paper's novel contribution.
 
-Work proceeds in phases; the roadmap and per-phase status are in `README.md`. Phases 1–3 are done: Triage (NEWS2 + LLM), Drug Safety (DDInter + RxNorm + LLM) and the Diagnostician (PubMed retrieval + LLM + ICD-11) are real. The Critique is deterministic checks only until Phase 4.
+Work proceeds in phases; the roadmap and per-phase status are in `README.md`. Phases 1–4 are done: Triage (NEWS2 + LLM), Drug Safety (DDInter + RxNorm + LLM), the Diagnostician (PubMed retrieval + LLM + ICD-11) and the Critique (adversarial LLM + citation verification + treatment cautions) are all real. Next is Phase 5 (persistence, history, PDF export, tracing), then Phase 6 (evaluation).
 
 ## Commands
 
@@ -63,22 +63,17 @@ Without an LLM there is no differential (empty list). Without retrieval, the dia
 
 **Tests** (`tests/conftest.py`) set env vars before importing app modules, which override `backend/.env`: no Groq key, LLM cache, RxNorm, `DATABASE_URL` or ICD credentials, and `DDINTER_DIR=tests/fixtures/ddinter`. Tests never touch the network. Use the `fake_llm({SchemaName: response | callable | exception})` and `fake_retriever(evidence | exception)` fixtures; `make_evidence()` builds `Evidence` rows. Agents can be called directly (outside a graph run, stream events are dropped).
 
-## Next up: Phase 4 (Critique agent) and open items
+**Critique** (`agents/critique.py`, Phase 4) runs two checks concurrently:
+- An LLM "senior attending" review on `critique_model` (Qwen, a different family; falls back to `llm_fallback_model`). It returns confidence, a one-sentence concern per diagnosis, missed diagnoses, ≤3 clarification questions and likely treatments.
+- A code-side citation check: `retriever.score()` runs the MedCPT cross-encoder on (condition, cited abstract). `SUPPORT_THRESHOLD = 8` is provisional (on-topic 12–16, irrelevant 2–7).
 
-Phase 4 replaces the deterministic Critique (`agents/critique.py`) with:
-- an adversarial "senior attending" LLM review on `critique_model` (Qwen, a different model family)
-- a code-side check that each citation actually supports its diagnosis (the `evidence` state key holds the retrieved abstracts)
-- targeted clarification questions that drive the Diagnostician's re-route
+An unsupported leading diagnosis caps confidence at 0.55, which forces a re-route. Likely treatments are checked against current meds in DDInter (`treatment_cautions`; unknown-severity pairs are dropped). Flags and missed diagnoses reach the re-routed Diagnostician through `_feedback()`. Without an LLM, the deterministic `_rules_review()` is used.
 
-Keep the deterministic checks as the fallback when the LLM is unavailable.
-
-Items deferred to Phase 4 or later:
-- **Treatment vs current medications:** check likely treatments for the diagnoses against the patient's meds in the DDInter graph. This was deferred from Phase 2 because Drug Safety runs in parallel with the Diagnostician and has no diagnoses yet, so it belongs at or after the Critique.
-- **Qwen strict mode is flaky** (random `json_validate_failed`, a tight 429 limit). The Critique needs a fallback model or retries within its time budget.
-- **`min_rerank_score = -5` is provisional.** Tune it in Phase 6 against labelled relevance (PRD RAG precision ≥0.70).
+## Open items
+- **Latency:** single-pass cases take ~8–13 s ✅. **Re-routed cases take ~20–23 s** ❌ (Diagnostician and Critique both run twice; Groq free-tier 429s). The PRD's ≤15 s is met for single passes only. The levers are a cheaper second pass (reuse retrieval, skip ICD), a smaller rerank pool, or a paid Groq tier.
+- **`min_rerank_score = -5` and `SUPPORT_THRESHOLD = 8` are provisional.** Tune both in Phase 6 against labelled relevance (PRD RAG precision ≥0.70).
 - **DDInter has gaps:** e.g. no ACE inhibitor + spironolactone pair. That limits DDI recall; document it for the paper and don't invent pairs.
-- **Latency:** single-pass cases take ~8–13 s and re-routes approach 15 s. Re-ranking (~3 s on CPU) and the Groq calls dominate.
-- The Phase 3 UI (citations, ICD display) was verified via the live API, not in a browser, because the Chrome extension was disconnected.
+- The UI for Phases 3–4 (citations, ICD, critique sections) was verified via the live API and type checks, not in a browser, because the Chrome extension was disconnected.
 
 ## Decided stack deviations from the PRD
 

@@ -32,6 +32,8 @@ logger = logging.getLogger(__name__)
 class Retriever(Protocol):
     async def search(self, queries: list[str]) -> list[Evidence]: ...
 
+    async def score(self, pairs: list[tuple[str, str]]) -> list[float]: ...
+
 
 # The Diagnostician sends the case query plus up to 5 hypothesis queries.
 MAX_PARALLEL_QUERIES = 6
@@ -124,6 +126,10 @@ class PubMedRetriever:
 
     async def search(self, queries: list[str]) -> list[Evidence]:
         return await asyncio.to_thread(self._search_sync, queries)
+
+    async def score(self, pairs: list[tuple[str, str]]) -> list[float]:
+        """Cross-encoder relevance of (query, document) pairs."""
+        return (await asyncio.to_thread(self._medcpt.rerank, pairs)).tolist()
 
     def _search_sync(self, queries: list[str]) -> list[Evidence]:
         from app.services.embeddings import to_halfvec_literal

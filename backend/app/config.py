@@ -18,9 +18,6 @@ class Settings(BaseSettings):
     # Hard cap on Critique -> Diagnostician re-routes (PRD: max 1 per case).
     max_reroutes: int = 1
 
-    # Artificial delay for agents that are still placeholders, so the streaming UI is visible.
-    stub_delay_seconds: float = 0.6
-
     run_timeout_seconds: float = 60.0
     max_runs_in_memory: int = 200
 

@@ -1,4 +1,5 @@
 from app.graph.builder import build_graph
+from tests.conftest import make_evidence
 
 
 def differential_by_case(system: str, user: str) -> dict:
@@ -13,15 +14,19 @@ def differential_by_case(system: str, user: str) -> dict:
                 "condition": diagnosis[0],
                 "confidence": diagnosis[1],
                 "rationale": "x",
-                "evidence_ids": [],
+                "evidence_ids": [1],
             }
         ]
     }
 
 
-async def test_confident_case_runs_once_and_finds_interaction(chest_pain_case, fake_llm):
-    # Only the differential is scripted; triage and drug explanations hit their fallbacks.
+async def test_confident_case_runs_once_and_finds_interaction(
+    chest_pain_case, fake_llm, fake_retriever
+):
+    # Only the differential is scripted; triage, drug explanations and the critique LLM
+    # hit their fallbacks.
     fake_llm({"Differential": differential_by_case})
+    fake_retriever([make_evidence(1, "Acute coronary syndrome review")])
     state = await build_graph().ainvoke({"case": chest_pain_case, "reroute_count": 0})
 
     report = state["report"]

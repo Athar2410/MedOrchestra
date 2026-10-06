@@ -74,12 +74,23 @@ export interface DrugInteraction {
   source_ids: string[];
 }
 
+export interface CitationCheck {
+  condition: string;
+  pmid: string;
+  score: number;
+  supported: boolean;
+}
+
 export interface Critique {
   confidence_score: number;
   flags: string[];
   clarification_questions: string[];
   summary: string;
   reroute_requested: boolean;
+  method: "llm" | "rules";
+  missed_diagnoses: string[];
+  citation_checks: CitationCheck[];
+  treatment_cautions: DrugInteraction[];
 }
 
 export interface ClinicalReport {

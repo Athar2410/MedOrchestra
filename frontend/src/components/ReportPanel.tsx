@@ -165,6 +165,13 @@ export function ReportPanel({ report }: { report: ClinicalReport }) {
                           {" "}
                           — {[c.journal, c.year].filter(Boolean).join(", ")} · PMID {c.id}
                         </span>
+                        {critique.citation_checks.some(
+                          (k) => k.pmid === c.id && k.condition === d.condition && !k.supported,
+                        ) && (
+                          <span className="ml-1 text-red-700 dark:text-red-400">
+                            ⚠ critique: does not support this diagnosis
+                          </span>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -212,7 +219,8 @@ export function ReportPanel({ report }: { report: ClinicalReport }) {
           <div className="flex items-center gap-3">
             <span className="text-2xl font-semibold tabular-nums">{pct(critique.confidence_score)}</span>
             <span className="text-sm text-zinc-500">
-              overall confidence{report.reroutes > 0 && ` · after ${report.reroutes} re-route`}
+              overall confidence{report.reroutes > 0 && ` · after ${report.reroutes} re-route`} ·{" "}
+              {critique.method === "llm" ? "AI senior review" : "rule checks"}
             </span>
           </div>
           <p className="text-sm">{critique.summary}</p>
@@ -222,6 +230,26 @@ export function ReportPanel({ report }: { report: ClinicalReport }) {
                 <li key={f}>{f}</li>
               ))}
             </ul>
+          )}
+          {critique.clarification_questions.length > 0 && (
+            <div className="text-sm">
+              <p className="font-medium">Questions to resolve</p>
+              <ul className="list-inside list-disc text-zinc-600 dark:text-zinc-400">
+                {critique.clarification_questions.map((q) => (
+                  <li key={q}>{q}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {critique.treatment_cautions.length > 0 && (
+            <div className="text-sm">
+              <p className="font-medium">Treatment cautions (likely treatment + current medication)</p>
+              <ul className="mt-1 space-y-2">
+                {critique.treatment_cautions.map((it) => (
+                  <InteractionItem key={`${it.drug_a}-${it.drug_b}`} it={it} />
+                ))}
+              </ul>
+            </div>
           )}
         </Section>
 

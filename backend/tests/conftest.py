@@ -6,7 +6,6 @@ from pathlib import Path
 # DDInter download.
 FIXTURES = Path(__file__).parent / "fixtures"
 os.environ.update(
-    STUB_DELAY_SECONDS="0",
     GROQ_API_KEY="",
     LLM_CACHE_PATH="",
     RXNORM_ENABLED="false",
@@ -99,6 +98,10 @@ class FakeRetriever:
         if isinstance(self.evidence, Exception):
             raise self.evidence
         return self.evidence
+
+    async def score(self, pairs: list[tuple[str, str]]) -> list[float]:
+        # Supported unless the document text mentions "unrelated".
+        return [-8.0 if "unrelated" in doc else 12.0 for _, doc in pairs]
 
 
 def make_evidence(pmid: int, title: str, query: str = "q", score: float = 1.0) -> Evidence:

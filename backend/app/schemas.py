@@ -100,12 +100,26 @@ class DrugInteraction(BaseModel):
     source_ids: list[str] = Field(default_factory=list)
 
 
+class CitationCheck(BaseModel):
+    """Code-side check: does the cited abstract support the diagnosis it is cited for?"""
+
+    condition: str
+    pmid: str
+    score: float  # MedCPT cross-encoder logit for (condition, abstract)
+    supported: bool
+
+
 class Critique(BaseModel):
     confidence_score: float = Field(ge=0, le=1)
     flags: list[str]
     clarification_questions: list[str]
     summary: str
     reroute_requested: bool
+    method: Literal["llm", "rules"] = "rules"
+    missed_diagnoses: list[str] = Field(default_factory=list)
+    citation_checks: list[CitationCheck] = Field(default_factory=list)
+    # Interactions between likely treatments for the leading diagnosis and current meds.
+    treatment_cautions: list[DrugInteraction] = Field(default_factory=list)
 
 
 class ClinicalReport(BaseModel):
