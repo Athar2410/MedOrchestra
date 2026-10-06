@@ -111,24 +111,30 @@ class RunManager:
             run.error = str(exc) or type(exc).__name__
         if run.error:
             await self._publish(run, {"type": "error", "message": run.error})
+        status = "failed" if run.error else "completed"
+        done = {"type": "done", "status": status}
+        # Save before announcing `done`: the UI refreshes its run list on `done`, so a
+        # later save raced it and the new run was missing from "Recent cases".
+        await self._persist(run, status, [*run.events, done], started)
         # Set `done` and append the final event atomically so no subscriber can see
         # the run as finished without also seeing its `done` event.
         async with run.changed:
             run.done = True
-            run.events.append({"type": "done", "status": run.status})
+            run.events.append(done)
             run.changed.notify_all()
-        await self._persist(run, round((time.perf_counter() - started) * 1000))
 
-    async def _persist(self, run: Run, duration_ms: int) -> None:
+    async def _persist(
+        self, run: Run, status: str, events: list[dict[str, Any]], started: float
+    ) -> None:
         # Best-effort: a database outage must not affect the live result.
         row = {
             "id": run.id,
-            "status": run.status,
+            "status": status,
             "case_input": to_jsonable_python(run.case),
             "report": to_jsonable_python(run.report),
-            "events": run.events,
+            "events": events,
             "error": run.error,
-            "duration_ms": duration_ms,
+            "duration_ms": round((time.perf_counter() - started) * 1000),
         }
         try:
             await asyncio.to_thread(run_store.save_run, row)
