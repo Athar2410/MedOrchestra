@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A multi-agent clinical decision support system (CDSS) implementing Borkowski et al. (2025), "Multiagent AI Systems in Health Care" (PMC12360800), as a B.Tech capstone. Requirements live in `MedOrchestra_PRD(1).pdf`. Synthetic/open data only — no EHR/FHIR, no clinical deployment. Scope is intentionally capped at **4 agents** (Triage, Diagnostician, Drug Safety, Critique; `report` is an assembly node, not an agent). The Critique agent and its feedback loop are the paper's novel contribution.
 
-Work proceeds in phases; the roadmap and per-phase status are in `README.md`. Phases 1–4 are done: Triage (NEWS2 + LLM), Drug Safety (DDInter + RxNorm + LLM), the Diagnostician (PubMed retrieval + LLM + ICD-11) and the Critique (adversarial LLM + citation verification + treatment cautions) are all real. Next is Phase 5 (persistence, history, PDF export, tracing), then Phase 6 (evaluation).
+Work proceeds in phases; the roadmap and per-phase status are in `README.md`. Phases 1–5 are done: all four agents are real, and runs are persisted with history/replay and PDF export. Next is Phase 6 (evaluation).
 
 ## Commands
 
@@ -39,7 +39,7 @@ npm run build
 
 **Agents** (`backend/app/agents/`): each is `async def agent(state, ctx) -> dict` (partial state update) wrapped in `@agent_node("name")` from `agents/base.py`. The wrapper emits `agent_started` / `agent_completed` (with `duration_ms` and JSON `output`) / `agent_failed` and appends to `agent_logs`. Inside an agent, use `ctx.think(msg)` for live progress and `ctx.emit(type, **data)` for other events (the critique emits `reroute`). `attempt` is `reroute_count + 1` for diagnostician/critique, so retries show up as attempt 2.
 
-**Streaming** (`backend/app/runs.py`, `backend/app/api.py`): `POST /api/cases` starts the graph as a background task and returns `run_id`. Events from LangGraph's `custom` stream are buffered on the `Run`. `GET /api/runs/{id}/stream` is SSE: `id:` is the event index and `data:` is JSON with a `type` field. Subscribers replay from `Last-Event-ID`, so browser `EventSource` reconnects never re-run a case. The stream always ends with a `done` event, appended atomically with `run.done = True`. Runs are in-memory only until Phase 5 (Supabase).
+**Streaming** (`backend/app/runs.py`, `backend/app/api.py`): `POST /api/cases` starts the graph as a background task and returns `run_id`. Events from LangGraph's `custom` stream are buffered on the `Run`. `GET /api/runs/{id}/stream` is SSE: `id:` is the event index and `data:` is JSON with a `type` field. Subscribers replay from `Last-Event-ID`, so browser `EventSource` reconnects never re-run a case. The stream always ends with a `done` event, appended atomically with `run.done = True`. Finished runs are saved to the Supabase `runs` table (`services/run_store.py`, `migrations/003`) with the case, report and full event list (~112 kB per run). `RunManager.load()` falls back to the database, so `GET /api/runs/{id}` and the SSE stream replay past runs after a restart. `GET /api/runs` lists recent runs for the UI's "Recent cases" panel. Saving is best-effort (a DB failure never affects the live result).
 
 **Event contract** is mirrored by hand in `frontend/src/lib/types.ts` (`RunEvent`, report schemas) — keep it in sync with `backend/app/schemas.py` and `agents/base.py`. `frontend/src/hooks/useRunStream.ts` folds events into per-agent, per-attempt UI state.
 
@@ -73,7 +73,9 @@ An unsupported leading diagnosis caps confidence at 0.55, which forces a re-rout
 - **Latency:** single-pass cases take ~8–12 s ✅. **Re-routed cases take ~18.6 s** (down from ~23 s): ICD-11 coding now runs once in the report node, and a re-route reuses the first pass's evidence and only searches new queries. The remaining cost is the second search + rerank (~4–5 s) for the new hypotheses. Further levers trade quality (smaller `rerank_pool`) or money (a paid Groq tier, to avoid 429 retries).
 - **`min_rerank_score = -5` and `SUPPORT_THRESHOLD = 8` are provisional.** Tune both in Phase 6 against labelled relevance (PRD RAG precision ≥0.70).
 - **DDInter has gaps:** e.g. no ACE inhibitor + spironolactone pair. That limits DDI recall; document it for the paper and don't invent pairs.
-- The UI for Phases 3–4 (citations, ICD, critique sections) was verified via the live API and type checks, not in a browser, because the Chrome extension was disconnected.
+- The UI for Phases 3–5 (citations, ICD, critique sections, Recent cases, PDF export) was verified via the live API and type checks, not in a browser, because the Chrome extension was disconnected.
+- **Supabase space:** the corpus uses ~362 MB of 500 MB, and runs take ~112 kB each (about 1,200 runs of headroom). Prune old runs or trim stored `output` payloads if evaluation needs more.
+- **Skipped on purpose:** Langfuse tracing (the stored event stream already captures every agent step) and server-side PDF generation (browser print-to-PDF via `exportPdf()`, light mode, print CSS).
 
 ## Decided stack deviations from the PRD
 

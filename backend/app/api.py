@@ -1,5 +1,7 @@
+import asyncio
 import json
 from collections.abc import AsyncIterator
+from datetime import datetime
 
 from fastapi import APIRouter, Header, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
@@ -7,6 +9,7 @@ from pydantic import BaseModel
 
 from app.runs import Run, RunManager
 from app.schemas import CaseInput, ClinicalReport
+from app.services import run_store
 
 router = APIRouter(prefix="/api")
 
@@ -14,6 +17,16 @@ router = APIRouter(prefix="/api")
 class RunCreated(BaseModel):
     run_id: str
     stream_url: str
+
+
+class RunSummary(BaseModel):
+    run_id: str
+    created_at: datetime
+    status: str
+    duration_ms: int | None
+    chief_complaint: str | None
+    urgency: str | None
+    top_diagnosis: str | None
 
 
 class RunStatus(BaseModel):
@@ -27,8 +40,8 @@ def _runs(request: Request) -> RunManager:
     return request.app.state.runs
 
 
-def _get_run(request: Request, run_id: str) -> Run:
-    run = _runs(request).get(run_id)
+async def _get_run(request: Request, run_id: str) -> Run:
+    run = await _runs(request).load(run_id)
     if run is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Run not found")
     return run
@@ -45,9 +58,16 @@ async def create_case(case: CaseInput, request: Request) -> RunCreated:
     return RunCreated(run_id=run.id, stream_url=f"/api/runs/{run.id}/stream")
 
 
+@router.get("/runs")
+async def list_runs(limit: int = 20) -> list[RunSummary]:
+    """Most recent saved runs (empty without a database)."""
+    rows = await asyncio.to_thread(run_store.list_runs, min(limit, 100))
+    return [RunSummary(**r) for r in rows]
+
+
 @router.get("/runs/{run_id}")
 async def get_run(run_id: str, request: Request) -> RunStatus:
-    run = _get_run(request, run_id)
+    run = await _get_run(request, run_id)
     return RunStatus(run_id=run.id, status=run.status, report=run.report, error=run.error)
 
 
@@ -59,7 +79,7 @@ async def stream_run(
 ) -> StreamingResponse:
     """SSE stream. Each message's `data` is a JSON event with a `type` field;
     the SSE `id` is the event index, so EventSource reconnects resume via Last-Event-ID."""
-    run = _get_run(request, run_id)
+    run = await _get_run(request, run_id)
     start = last_event_id + 1 if last_event_id is not None else 0
 
     async def body() -> AsyncIterator[str]:

@@ -48,7 +48,7 @@ Config: copy `backend/.env.example` → `backend/.env` and add a Groq API key (h
 | 2 | Groq LLM service (strict structured output, retries, time budget, fallback model, cache); LLM triage escalation with NEWS2 floor and red-flag rule fallback; DDInter graph + RxNorm → Drug Safety with LLM explanations | ✅ done |
 | 3 | Supabase pgvector + PubMed ingestion (130 topics incl. all DDXPlus conditions), MedCPT embeddings, hybrid search + reranker → hypothesis-driven Diagnostician with validated PubMed citations; ICD-11 coding | ✅ done |
 | 4 | Critique: adversarial LLM review (different model family), cross-encoder citation verification, missed-diagnosis and clarification feedback into the re-route, likely-treatment vs current-medication cautions | ✅ done |
-| 5 | Persist runs to Supabase, run history, PDF export, Langfuse tracing | |
+| 5 | Runs persisted to Supabase (case, report, full event stream), Recent cases panel with timeline replay, print-to-PDF export with case summary | ✅ done |
 | 6 | Evaluation: DDXPlus + MIMIC demo cases, top-1/top-3, DDI recall, latency, ablation, baselines | |
 
 ## Data sources & licences

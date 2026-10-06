@@ -72,3 +72,48 @@ async def test_get_run_returns_report(client, chest_pain_case):
 async def test_validation_and_unknown_run(client):
     assert (await client.post("/api/cases", json={"chief_complaint": ""})).status_code == 422
     assert (await client.get("/api/runs/nope/stream")).status_code == 404
+
+
+@pytest.fixture
+def fake_store(monkeypatch):
+    """In-memory stand-in for the Supabase `runs` table."""
+    from app.services import run_store
+
+    rows: dict[str, dict] = {}
+    monkeypatch.setattr(run_store, "save_run", lambda row: rows.setdefault(row["id"], row))
+    monkeypatch.setattr(run_store, "load_run", lambda run_id: rows.get(run_id))
+    monkeypatch.setattr(
+        run_store,
+        "list_runs",
+        lambda limit=20: [
+            {
+                "run_id": r["id"],
+                "created_at": "2026-10-06T10:00:00Z",
+                "status": r["status"],
+                "duration_ms": r["duration_ms"],
+                "chief_complaint": r["case_input"]["chief_complaint"],
+                "urgency": r["report"]["urgency"],
+                "top_diagnosis": None,
+            }  # fmt: skip
+            for r in rows.values()
+        ][:limit],
+    )
+    return rows
+
+
+async def test_finished_run_is_saved_listed_and_replayable_after_eviction(
+    client, vague_case, fake_store
+):
+    run_id = await create_run(client, vague_case)
+    live = parse_sse((await client.get(f"/api/runs/{run_id}/stream")).text)
+
+    saved = fake_store[run_id]
+    assert saved["status"] == "completed" and saved["report"]["case"]["chief_complaint"]
+    listed = (await client.get("/api/runs")).json()
+    assert [r["run_id"] for r in listed] == [run_id]
+
+    # Simulate a server restart: the run is gone from memory, only the database has it.
+    client._transport.app.state.runs._runs.clear()
+    replayed = parse_sse((await client.get(f"/api/runs/{run_id}/stream")).text)
+    assert replayed == live
+    assert (await client.get(f"/api/runs/{run_id}")).json()["status"] == "completed"

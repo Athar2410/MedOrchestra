@@ -28,6 +28,55 @@ const MATCH_LABEL: Record<NonNullable<MedicationMatch["method"]>, string> = {
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 
+const VITAL_LABELS: [keyof ClinicalReport["case"]["vitals"], string, string][] = [
+  ["heart_rate", "HR", ""],
+  ["systolic_bp", "SBP", ""],
+  ["respiratory_rate", "RR", ""],
+  ["spo2", "SpO₂", "%"],
+  ["temperature_c", "Temp", "°C"],
+];
+
+/** Browser print-to-PDF, always in light mode, with a descriptive file name. */
+function exportPdf(report: ClinicalReport) {
+  const root = document.documentElement;
+  const wasDark = root.classList.contains("dark");
+  const title = document.title;
+  const date = new Date(report.generated_at).toISOString().slice(0, 10);
+  root.classList.remove("dark");
+  document.title = `MedOrchestra report ${date} ${report.urgency}`;
+  window.addEventListener(
+    "afterprint",
+    () => {
+      root.classList.toggle("dark", wasDark);
+      document.title = title;
+    },
+    { once: true },
+  );
+  window.print();
+}
+
+function CaseSummary({ c }: { c: ClinicalReport["case"] }) {
+  const vitals = VITAL_LABELS.filter(([k]) => c.vitals[k] != null)
+    .map(([k, label, unit]) =>
+      k === "systolic_bp" && c.vitals.diastolic_bp != null
+        ? `BP ${c.vitals.systolic_bp}/${c.vitals.diastolic_bp}`
+        : `${label} ${c.vitals[k]}${unit}`,
+    )
+    .join(" · ");
+  const patient = [c.age != null ? `${c.age}y` : null, c.sex].filter(Boolean).join(", ");
+  return (
+    <div className="space-y-1 text-sm">
+      <p>
+        <span className="font-medium">{patient || "Patient"}:</span> {c.chief_complaint}
+      </p>
+      {vitals && <p className="text-zinc-600 dark:text-zinc-400">{vitals}</p>}
+      {c.medications.length > 0 && (
+        <p className="text-zinc-600 dark:text-zinc-400">Medications: {c.medications.join(", ")}</p>
+      )}
+    </div>
+  );
+}
+
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="space-y-2">
@@ -103,7 +152,7 @@ export function ReportPanel({ report }: { report: ClinicalReport }) {
   const unresolved = report.medication_matches.some((m) => m.resolved.length === 0);
 
   return (
-    <article className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <article className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900 print:rounded-none print:border-0 print:shadow-none">
       <div className={`${URGENCY_STYLE[report.urgency]} px-5 py-3 text-white`}>
         <div className="flex items-center justify-between gap-2">
           <span className="text-lg font-semibold">{report.urgency} urgency</span>
@@ -124,6 +173,10 @@ export function ReportPanel({ report }: { report: ClinicalReport }) {
       </div>
 
       <div className="space-y-6 p-5">
+        <Section title="Case">
+          <CaseSummary c={report.case} />
+        </Section>
+
         <Section title="Differential diagnoses">
           {report.diagnoses.length === 0 && (
             <p className="text-sm text-zinc-500">
@@ -258,10 +311,10 @@ export function ReportPanel({ report }: { report: ClinicalReport }) {
             {report.disclaimer} Generated {new Date(report.generated_at).toLocaleString()}.
           </span>
           <button
-            onClick={() => window.print()}
+            onClick={() => exportPdf(report)}
             className="no-print shrink-0 rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
           >
-            Print / Save PDF
+            Export PDF
           </button>
         </footer>
       </div>

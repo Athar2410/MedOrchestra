@@ -94,6 +94,7 @@ export interface Critique {
 }
 
 export interface ClinicalReport {
+  case: CaseInput;
   urgency: Urgency;
   triage: TriageResult;
   diagnoses: Diagnosis[];
@@ -103,6 +104,16 @@ export interface ClinicalReport {
   reroutes: number;
   generated_at: string;
   disclaimer: string;
+}
+
+export interface RunSummary {
+  run_id: string;
+  created_at: string;
+  status: "completed" | "failed";
+  duration_ms: number | null;
+  chief_complaint: string | null;
+  urgency: Urgency | null;
+  top_diagnosis: string | null;
 }
 
 interface AgentEventBase {

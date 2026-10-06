@@ -122,21 +122,37 @@ export function useRunStream() {
 
   useEffect(() => () => closeRef.current?.(), []);
 
-  const analyze = useCallback(async (input: CaseInput) => {
-    closeRef.current?.();
-    dispatch({ type: "start" });
-    try {
-      const runId = await createCase(input);
-      dispatch({ type: "started", runId });
-      closeRef.current = openRunStream(
-        runId,
-        (event) => dispatch({ type: "event", event }),
-        () => dispatch({ type: "fail", error: "Lost connection to the analysis server." }),
-      );
-    } catch (err) {
-      dispatch({ type: "fail", error: err instanceof Error ? err.message : String(err) });
-    }
+  const follow = useCallback((runId: string) => {
+    dispatch({ type: "started", runId });
+    closeRef.current = openRunStream(
+      runId,
+      (event) => dispatch({ type: "event", event }),
+      () => dispatch({ type: "fail", error: "Lost connection to the analysis server." }),
+    );
   }, []);
 
-  return { state, analyze };
+  const analyze = useCallback(
+    async (input: CaseInput) => {
+      closeRef.current?.();
+      dispatch({ type: "start" });
+      try {
+        follow(await createCase(input));
+      } catch (err) {
+        dispatch({ type: "fail", error: err instanceof Error ? err.message : String(err) });
+      }
+    },
+    [follow],
+  );
+
+  // A saved run streams its stored events, so the timeline replays exactly as it ran.
+  const replay = useCallback(
+    (runId: string) => {
+      closeRef.current?.();
+      dispatch({ type: "start" });
+      follow(runId);
+    },
+    [follow],
+  );
+
+  return { state, analyze, replay };
 }

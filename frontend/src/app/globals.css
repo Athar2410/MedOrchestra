@@ -16,6 +16,14 @@ body {
   .no-print {
     display: none !important;
   }
+  /* Keep the urgency banner and severity badge colours in the PDF. */
+  * {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  li {
+    break-inside: avoid;
+  }
   body {
     background: white;
     color: black;

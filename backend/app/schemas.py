@@ -123,6 +123,7 @@ class Critique(BaseModel):
 
 
 class ClinicalReport(BaseModel):
+    case: CaseInput  # makes a saved or printed report self-contained
     urgency: Urgency
     triage: TriageResult
     diagnoses: list[Diagnosis]

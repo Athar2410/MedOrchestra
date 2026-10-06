@@ -4,19 +4,25 @@ import { AgentTimeline } from "@/components/AgentTimeline";
 import { CaseForm } from "@/components/CaseForm";
 import { Header } from "@/components/Header";
 import { ReportPanel } from "@/components/ReportPanel";
+import { RunHistory } from "@/components/RunHistory";
 import { useRunStream } from "@/hooks/useRunStream";
 
 export default function Home() {
-  const { state, analyze } = useRunStream();
+  const { state, analyze, replay } = useRunStream();
   const busy = state.status === "starting" || state.status === "running";
 
   return (
     <>
       <Header />
-      <main className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <div className="space-y-6">
+      <main className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] print:block print:p-0">
+        <div className="space-y-6 print:hidden">
           <CaseForm busy={busy} onSubmit={analyze} />
           {state.status !== "idle" && <AgentTimeline state={state} />}
+          <RunHistory
+            refreshKey={`${state.runId}-${state.status}`}
+            activeRunId={state.runId}
+            onOpen={replay}
+          />
         </div>
         <div>
           {state.report ? (

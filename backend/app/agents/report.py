@@ -37,6 +37,7 @@ async def report_agent(state: ClinicalState, ctx: AgentContext) -> dict:
     ctx.think("Assembling clinical report")
     return {
         "report": ClinicalReport(
+            case=state["case"],
             urgency=state["triage"].urgency,
             triage=state["triage"],
             diagnoses=diagnoses,

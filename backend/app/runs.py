@@ -3,11 +3,13 @@
 The POST that creates a run starts execution immediately; any number of SSE
 subscribers can then replay the buffered events from an index (the SSE
 `Last-Event-ID`) and tail new ones, so browser reconnects never re-run a case.
-Runs live in memory only; Phase 5 persists finished runs to Supabase.
+Finished runs are saved to Supabase (services/run_store.py); `load()` brings an evicted or
+past run back so its stream can be replayed.
 """
 
 import asyncio
 import logging
+import time
 import uuid
 from collections import OrderedDict
 from collections.abc import AsyncIterator
@@ -19,6 +21,7 @@ from pydantic_core import to_jsonable_python
 
 from app.config import Settings
 from app.schemas import CaseInput, ClinicalReport
+from app.services import run_store
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +55,26 @@ class RunManager:
     def get(self, run_id: str) -> Run | None:
         return self._runs.get(run_id)
 
+    async def load(self, run_id: str) -> Run | None:
+        """In-memory run, else a finished run from the database."""
+        if run := self._runs.get(run_id):
+            return run
+        try:
+            row = await asyncio.to_thread(run_store.load_run, run_id)
+        except Exception:
+            logger.exception("Loading run %s failed", run_id)
+            return None
+        if row is None:
+            return None
+        return Run(
+            id=row["id"],
+            case=CaseInput.model_validate(row["case_input"]),
+            events=row["events"],
+            report=ClinicalReport.model_validate(row["report"]) if row["report"] else None,
+            error=row["error"],
+            done=True,
+        )
+
     def start(self, case: CaseInput) -> Run:
         run = Run(id=uuid.uuid4().hex, case=case)
         self._runs[run.id] = run
@@ -68,6 +91,7 @@ class RunManager:
             run.changed.notify_all()
 
     async def _execute(self, run: Run) -> None:
+        started = time.perf_counter()
         await self._publish(run, {"type": "run_started", "run_id": run.id})
         try:
             async with asyncio.timeout(self._settings.run_timeout_seconds):
@@ -93,6 +117,23 @@ class RunManager:
             run.done = True
             run.events.append({"type": "done", "status": run.status})
             run.changed.notify_all()
+        await self._persist(run, round((time.perf_counter() - started) * 1000))
+
+    async def _persist(self, run: Run, duration_ms: int) -> None:
+        # Best-effort: a database outage must not affect the live result.
+        row = {
+            "id": run.id,
+            "status": run.status,
+            "case_input": to_jsonable_python(run.case),
+            "report": to_jsonable_python(run.report),
+            "events": run.events,
+            "error": run.error,
+            "duration_ms": duration_ms,
+        }
+        try:
+            await asyncio.to_thread(run_store.save_run, row)
+        except Exception:
+            logger.exception("Saving run %s failed", run.id)
 
     async def subscribe(self, run: Run, start: int = 0) -> AsyncIterator[tuple[int, dict] | None]:
         """Yield (index, event) from `start` until the run ends; None means send a keepalive."""
