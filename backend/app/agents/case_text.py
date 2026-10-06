@@ -33,6 +33,6 @@ def describe_case(case: CaseInput) -> str:
 
 
 def search_query(case: CaseInput) -> str:
-    """Short query for the MedCPT query encoder (max 64 tokens)."""
+    """Short query for the MedCPT query encoder (max 64 tokens) and the reranker."""
     who = " ".join(p for p in (f"{case.age} year old" if case.age else "", case.sex or "") if p)
-    return f"{who} {case.chief_complaint}".strip()
+    return f"{who} {case.chief_complaint}".strip()[:300]

@@ -226,9 +226,12 @@ class GroqClient:
                 continue
             if resp.status_code == 200:
                 return resp.json()["choices"][0]["message"]["content"]
-            # Qwen strict mode occasionally fails constrained decoding at random; a retry
+            # Constrained decoding occasionally fails at random (Qwen: json_validate_failed;
+            # gpt-oss writes its reasoning as the answer: output_parse_failed); a retry
             # usually succeeds.
-            json_failed = resp.status_code == 400 and "json_validate_failed" in resp.text
+            json_failed = resp.status_code == 400 and (
+                "json_validate_failed" in resp.text or "output_parse_failed" in resp.text
+            )
             if resp.status_code in _RETRYABLE_STATUS or json_failed:
                 delay = min(
                     float(resp.headers.get("retry-after") or 2 ** (attempt - 1)),

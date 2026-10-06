@@ -74,7 +74,9 @@ class MedCPT:
             tokenizer, model = self._load("cross")
             enc = tokenizer(
                 [list(p) for p in pairs],
-                truncation="only_second",
+                # longest_first: a long query (e.g. a full case text) would make
+                # "only_second" fail with "sequence to truncate too short".
+                truncation="longest_first",
                 padding=True,
                 return_tensors="pt",
                 max_length=max_length,

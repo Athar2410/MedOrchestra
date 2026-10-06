@@ -49,7 +49,7 @@ Config: copy `backend/.env.example` → `backend/.env` and add a Groq API key (h
 | 3 | Supabase pgvector + PubMed ingestion (130 topics incl. all DDXPlus conditions), MedCPT embeddings, hybrid search + reranker → hypothesis-driven Diagnostician with validated PubMed citations; ICD-11 coding | ✅ done |
 | 4 | Critique: adversarial LLM review (different model family), cross-encoder citation verification, missed-diagnosis and clarification feedback into the re-route, likely-treatment vs current-medication cautions | ✅ done |
 | 5 | Runs persisted to Supabase (case, report, full event stream), Recent cases panel with timeline replay, print-to-PDF export with case summary | ✅ done |
-| 6 | Evaluation: DDXPlus + MIMIC demo cases, top-1/top-3, DDI recall, latency, ablation, baselines | |
+| 6 | Evaluation on DDXPlus (top-1/top-3, Critique ablation, single-LLM baseline, retrieval precision, latency, calibration proxy) and DDI recall via brand names — results in `backend/eval/results/` | ⏳ 25/50 cases |
 
 ## Data sources & licences
 

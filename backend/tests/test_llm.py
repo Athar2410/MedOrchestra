@@ -83,9 +83,14 @@ async def test_retries_rate_limit_and_json_validate_failed():
         httpx.Response(
             400, headers={"retry-after": "0"}, text='{"error":{"code":"json_validate_failed"}}'
         ),
+        httpx.Response(
+            400, headers={"retry-after": "0"}, text='{"error":{"code":"output_parse_failed"}}'
+        ),
         chat_response(GOOD),
     ]
-    out = await client(lambda r: responses.pop(0)).structured(system="s", user="u", schema=Out)
+    out = await client(lambda r: responses.pop(0), llm_max_retries=4).structured(
+        system="s", user="u", schema=Out
+    )
     assert out.urgency == "HIGH" and responses == []
 
 

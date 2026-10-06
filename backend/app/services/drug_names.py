@@ -41,6 +41,11 @@ SYNONYM_GROUPS: list[set[str]] = [
     {"valproic acid", "valproate", "sodium valproate"},
     {"co-trimoxazole", "sulfamethoxazole"},
     {"bendroflumethiazide", "bendrofluazide"},
+    # Found by eval/ddi_recall.py: RxNorm returns the US name, DDInter uses the INN.
+    {"isoprenaline", "isoproterenol"},
+    {"tioguanine", "thioguanine"},
+    {"alimemazine", "trimeprazine"},
+    {"mepyramine", "pyrilamine"},
 ]
 _SYNONYMS = {name: group for group in SYNONYM_GROUPS for name in group}
 

@@ -6,7 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A multi-agent clinical decision support system (CDSS) implementing Borkowski et al. (2025), "Multiagent AI Systems in Health Care" (PMC12360800), as a B.Tech capstone. Requirements live in `MedOrchestra_PRD(1).pdf`. Synthetic/open data only — no EHR/FHIR, no clinical deployment. Scope is intentionally capped at **4 agents** (Triage, Diagnostician, Drug Safety, Critique; `report` is an assembly node, not an agent). The Critique agent and its feedback loop are the paper's novel contribution.
 
-Work proceeds in phases; the roadmap and per-phase status are in `README.md`. Phases 1–5 are done: all four agents are real, and runs are persisted with history/replay and PDF export. Next is Phase 6 (evaluation).
+Work proceeds in phases; the roadmap and per-phase status are in `README.md`. Phases 1–5 are done: all four agents are real, and runs are persisted with history/replay and PDF export. **Phase 6 (evaluation) is in progress:** 25 of 50 DDXPlus cases are done (Groq free-tier daily token quota). Resume with `python -m eval.run_eval`.
+
+**Evaluation** (`backend/eval/`): `ddxplus.py` builds 50 cases (one per DDXPlus class + 1) into `data/ddxplus/cases.jsonl`. `run_eval.py` runs pipeline + single-LLM baseline + LLM judge per case. It is resumable, paces 20 s between cases, retries degraded cases, and `--rejudge` re-scores saved predictions. `ddi_recall.py` handles drug-interaction recall (no Groq). Results are in `eval/results/`.
+- The ablation needs no extra runs: the "no Critique" arm is the Diagnostician's first-pass output, taken from the same run's events.
+- The judge runs on Qwen (a different family from the gpt-oss models it grades) and is given the 49 DDXPlus class names. Without that context it credited "viral URI" for Influenza and failed "allergic rhinitis" for Allergic sinusitis. It still made one lenient error (supraglottitis accepted for laryngitis).
+- **Groq free tier: 8K tokens/min and 200K tokens/day per model.** One evaluated case costs ~15–20K tokens, so ~10–13 cases/day fit on `gpt-oss-120b`.
 
 ## Commands
 
