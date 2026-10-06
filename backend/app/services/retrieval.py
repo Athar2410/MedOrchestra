@@ -15,10 +15,13 @@ event loop) and runs with the model inference in a worker thread.
 import asyncio
 import logging
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from functools import lru_cache
 from itertools import zip_longest
 from typing import Any, Protocol
+
+import psycopg
 
 from app.config import Settings, get_settings
 from app.schemas import Evidence
@@ -28,6 +31,15 @@ logger = logging.getLogger(__name__)
 
 class Retriever(Protocol):
     async def search(self, queries: list[str]) -> list[Evidence]: ...
+
+
+# The Diagnostician sends the case query plus up to 5 hypothesis queries.
+MAX_PARALLEL_QUERIES = 6
+STATEMENT_TIMEOUT = "3s"
+
+
+def _configure_connection(conn: Any) -> None:
+    conn.execute(f"set statement_timeout = '{STATEMENT_TIMEOUT}'")
 
 
 SEARCH_SQL = """
@@ -96,10 +108,11 @@ class PubMedRetriever:
         self._medcpt = get_medcpt()
         self._pool = ConnectionPool(
             settings.database_url,
-            min_size=1,
-            max_size=4,
+            min_size=2,
+            max_size=MAX_PARALLEL_QUERIES,
             open=False,
             kwargs={"autocommit": True},
+            configure=_configure_connection,
         )
 
     def close(self) -> None:
@@ -121,14 +134,22 @@ class PubMedRetriever:
         self._pool.open(wait=True, timeout=20)
         vectors = self._medcpt.encode_queries(queries)
 
-        per_query: list[list[tuple[str, tuple[Any, ...]]]] = []
-        with self._pool.connection() as conn:
-            for query, vector in zip(queries, vectors, strict=True):
-                rows = conn.execute(
-                    SEARCH_SQL,
-                    (query, to_halfvec_literal(vector), self._settings.retrieval_per_query),
-                ).fetchall()
-                per_query.append([(query, row) for row in rows])
+        def run(query: str, vector: Any) -> list[tuple[str, Row]]:
+            # One query timing out (statement_timeout) costs only its own hits.
+            try:
+                with self._pool.connection() as conn:
+                    rows = conn.execute(
+                        SEARCH_SQL,
+                        (query, to_halfvec_literal(vector), self._settings.retrieval_per_query),
+                    ).fetchall()
+            except psycopg.Error as exc:
+                logger.warning("hybrid_search failed for %r: %s", query, exc)
+                return []
+            return [(query, row) for row in rows]
+
+        # Queries run in parallel: on a cold free-tier cache each takes 0.2-1.7 s.
+        with ThreadPoolExecutor(max_workers=MAX_PARALLEL_QUERIES) as executor:
+            per_query = list(executor.map(run, queries, vectors))
 
         pool = pool_candidates(per_query, self._settings.rerank_pool)
         if not pool:

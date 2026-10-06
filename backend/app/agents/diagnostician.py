@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 # Runs in parallel with Drug Safety (8 s budget), after Triage.
 HYPOTHESIS_BUDGET_SECONDS = 5.0
-RETRIEVAL_BUDGET_SECONDS = 6.0
+RETRIEVAL_BUDGET_SECONDS = 8.0
 DIFFERENTIAL_BUDGET_SECONDS = 8.0
 ICD_BUDGET_SECONDS = 3.0
 MAX_HYPOTHESES = 5

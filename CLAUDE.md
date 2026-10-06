@@ -55,6 +55,7 @@ npm run build
 4. ICD-11 codes are looked up via `services/icd.py`. WHO's `autocode` returns 500 on release 2026-01, so it uses `search` + a qualifier rule ("Dengue fever" must not become "Severe dengue"), with `autocode` on 2025-01 as the fallback.
 
 Without an LLM there is no differential (empty list). Without retrieval, the diagnoses are uncited.
+- Corpus: 50K abstracts, 130 topics, ~362 MB of the 500 MB free tier. At this size the keyword side of `hybrid_search` must stay bounded (`migrations/002`): it ANDs the terms first, falls back to OR, and ranks at most 300 matches. Ranking all OR matches (~15K rows) took ~7 s on a cold cache and silently blew the retrieval budget. Hybrid queries run in parallel on a 6-connection pool with `statement_timeout=3s`. The ingestion reconnects when the Supabase pooler drops the connection.
 - Database code is **sync psycopg in `asyncio.to_thread`**, because psycopg async does not work on the Windows Proactor loop. MedCPT inference shares that thread and holds a lock. `pubmed_chunks` stores `halfvec(768)` to fit the Supabase free tier. RLS is on (the backend connects as the owner).
 - CPU costs on the dev laptop (i5-1235U): article embedding ~5–8/s with length-sorted batches (unsorted padding made it 2.4/s), and the cross-encoder ~0.15 s/doc. Int8 quantization was rejected (0.94 cosine to fp32).
 

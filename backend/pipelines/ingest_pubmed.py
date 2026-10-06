@@ -215,24 +215,33 @@ def stage_embed(wanted: list[tuple[int, str]], database_url: str, batch: int = 3
         for i in range(0, len(todo), batch):
             chunk = todo[i : i + batch]
             vectors = medcpt.encode_articles([(a["title"], a["abstract"]) for a, _ in chunk])
-            with conn.cursor() as cur:
-                cur.executemany(
-                    UPSERT,
-                    [
-                        (
-                            a["pmid"],
-                            a["title"],
-                            a["abstract"],
-                            a["journal"],
-                            a["pub_year"],
-                            a["mesh_terms"],
-                            topic,
-                            to_halfvec_literal(v),
-                        )  # fmt: skip
-                        for (a, topic), v in zip(chunk, vectors, strict=True)
-                    ],
-                )
-            conn.commit()
+            rows = [
+                (
+                    a["pmid"],
+                    a["title"],
+                    a["abstract"],
+                    a["journal"],
+                    a["pub_year"],
+                    a["mesh_terms"],
+                    topic,
+                    to_halfvec_literal(v),
+                )  # fmt: skip
+                for (a, topic), v in zip(chunk, vectors, strict=True)
+            ]
+            # The Supabase pooler occasionally drops long-lived connections; reconnect and
+            # retry the batch rather than losing a multi-hour run.
+            for attempt in range(5):
+                try:
+                    with conn.cursor() as cur:
+                        cur.executemany(UPSERT, rows)
+                    conn.commit()
+                    break
+                except psycopg.OperationalError as exc:
+                    if attempt == 4:
+                        raise
+                    print(f"  database connection lost ({exc}); reconnecting", flush=True)
+                    time.sleep(5 * (attempt + 1))
+                    conn = psycopg.connect(database_url)
             n = min(i + batch, len(todo))
             rate = n / (time.monotonic() - started)
             eta = (len(todo) - n) / rate / 60
