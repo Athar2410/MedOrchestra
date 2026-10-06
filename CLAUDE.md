@@ -21,10 +21,10 @@ Windows dev machine. Python uses the venv at `backend/.venv`; Node was installed
 .\.venv\Scripts\python -m uvicorn app.main:app --reload --port 8000
 .\.venv\Scripts\python -m pipelines.download_ddinter    # into backend/data/ddinter (gitignored, CC BY-NC-SA)
 .\.venv\Scripts\python -m pipelines.migrate             # apply backend/migrations/*.sql (idempotent)
-.\.venv\Scripts\python -m pipelines.ingest_pubmed --limit 5000   # resumable; state in backend/data/pubmed
+.\.venv\Scripts\python -m pipelines.ingest_pubmed --limit 50000  # done: 50K in Supabase; resumable, state in backend/data/pubmed
 
 # frontend/
-npm run dev      # http://localhost:3000, expects API at NEXT_PUBLIC_API_URL (default http://localhost:8000)
+npm run dev      # http://localhost:3000, expects API at NEXT_PUBLIC_API_URL (default http://127.0.0.1:8000 — `localhost` costs ~2 s per request on this machine via IPv6 fallback)
 npm run lint
 npm run build
 ```
@@ -62,6 +62,23 @@ Without an LLM there is no differential (empty list). Without retrieval, the dia
 **Drug data** (`services/drug_graph.py`, `services/drug_names.py`): an undirected graph of 1,939 drugs and 160K pairs. Duplicate pairs across DDInter's per-ATC files keep the most severe graded level. DDInter has no mechanism text and mixes INN/USAN names (`acetylsalicylic acid` but `salbutamol`), so names resolve via exact → synonym groups → RxNorm (`approximateTerm` score ≥ 7, then ingredients, which handles brands and combination products) → fuzzy.
 
 **Tests** (`tests/conftest.py`) set env vars before importing app modules, which override `backend/.env`: no Groq key, LLM cache, RxNorm, `DATABASE_URL` or ICD credentials, and `DDINTER_DIR=tests/fixtures/ddinter`. Tests never touch the network. Use the `fake_llm({SchemaName: response | callable | exception})` and `fake_retriever(evidence | exception)` fixtures; `make_evidence()` builds `Evidence` rows. Agents can be called directly (outside a graph run, stream events are dropped).
+
+## Next up: Phase 4 (Critique agent) and open items
+
+Phase 4 replaces the deterministic Critique (`agents/critique.py`) with:
+- an adversarial "senior attending" LLM review on `critique_model` (Qwen, a different model family)
+- a code-side check that each citation actually supports its diagnosis (the `evidence` state key holds the retrieved abstracts)
+- targeted clarification questions that drive the Diagnostician's re-route
+
+Keep the deterministic checks as the fallback when the LLM is unavailable.
+
+Items deferred to Phase 4 or later:
+- **Treatment vs current medications:** check likely treatments for the diagnoses against the patient's meds in the DDInter graph. This was deferred from Phase 2 because Drug Safety runs in parallel with the Diagnostician and has no diagnoses yet, so it belongs at or after the Critique.
+- **Qwen strict mode is flaky** (random `json_validate_failed`, a tight 429 limit). The Critique needs a fallback model or retries within its time budget.
+- **`min_rerank_score = -5` is provisional.** Tune it in Phase 6 against labelled relevance (PRD RAG precision ≥0.70).
+- **DDInter has gaps:** e.g. no ACE inhibitor + spironolactone pair. That limits DDI recall; document it for the paper and don't invent pairs.
+- **Latency:** single-pass cases take ~8–13 s and re-routes approach 15 s. Re-ranking (~3 s on CPU) and the Groq calls dominate.
+- The Phase 3 UI (citations, ICD display) was verified via the live API, not in a browser, because the Chrome extension was disconnected.
 
 ## Decided stack deviations from the PRD
 
