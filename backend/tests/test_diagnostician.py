@@ -123,3 +123,26 @@ async def test_reroute_passes_critique_concerns_to_both_prompts(fake_llm, fake_r
     for call in llm.calls:
         assert "rejected the previous differential [GERD (0.30)]" in call["user"]
         assert "Was the pain exertional?" in call["user"]
+
+
+async def test_reroute_reuses_evidence_and_searches_only_new_queries(fake_llm, fake_retriever):
+    fake_llm({"Hypotheses": HYPOTHESES, "Differential": differential(("PE", 0.5, "x", [1, 2]))})
+    retriever = fake_retriever([make_evidence(333, "New dissection paper")])
+    first = make_evidence(111, "Troponin in ACS", query="ACS chest pain diagnosis")
+    state = {
+        "case": CASE,
+        "reroute_count": 1,
+        "evidence": [first],
+        "diagnoses": [],
+        "critique": Critique(
+            confidence_score=0.3,
+            flags=[],
+            clarification_questions=[],
+            summary="",
+            reroute_requested=True,
+        ),  # fmt: skip
+    }
+    result = await diagnostician_agent(state)
+    # Case query and the already-run ACS query are skipped; only the new one is searched.
+    assert retriever.calls == [["aortic dissection chest pain"]]
+    assert [e.pmid for e in result["evidence"]] == [111, 333]

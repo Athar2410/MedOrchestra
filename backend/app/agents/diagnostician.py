@@ -7,7 +7,7 @@
      evidence for conditions the symptom text alone would not surface
   3. differential — the LLM ranks the top 3 using only the numbered abstracts; every
      citation is validated against what was actually retrieved (invented ones dropped)
-  4. ICD-11 coding in parallel (services/icd.py)
+ICD-11 coding happens once, on the final differential, in the report node.
 
 Without an LLM there is no differential (an empty list, which the Critique flags);
 without retrieval the LLM still answers but every diagnosis is uncited.
@@ -22,7 +22,6 @@ from app.agents.base import AgentContext, agent_node
 from app.agents.case_text import describe_case, search_query
 from app.graph.state import ClinicalState
 from app.schemas import Citation, Diagnosis, Evidence
-from app.services.icd import get_icd
 from app.services.llm import LLMError, get_llm
 from app.services.retrieval import get_retriever
 
@@ -32,7 +31,6 @@ logger = logging.getLogger(__name__)
 HYPOTHESIS_BUDGET_SECONDS = 5.0
 RETRIEVAL_BUDGET_SECONDS = 8.0
 DIFFERENTIAL_BUDGET_SECONDS = 8.0
-ICD_BUDGET_SECONDS = 3.0
 MAX_HYPOTHESES = 5
 MAX_DIAGNOSES = 3
 
@@ -136,24 +134,6 @@ async def _retrieve(queries: list[str], ctx: AgentContext) -> list[Evidence]:
         return []
 
 
-async def _code_icd(diagnoses: list[Diagnosis], ctx: AgentContext) -> list[Diagnosis]:
-    icd = get_icd()
-    if icd is None or not diagnoses:
-        return diagnoses
-    ctx.think("Coding diagnoses in ICD-11")
-    try:
-        matches = await asyncio.wait_for(
-            asyncio.gather(*(icd.code(d.condition) for d in diagnoses)), ICD_BUDGET_SECONDS
-        )
-    except TimeoutError:
-        logger.warning("ICD-11 coding timed out")
-        return diagnoses
-    return [
-        d.model_copy(update={"icd11_code": m.code, "icd11_title": m.title}) if m else d
-        for d, m in zip(diagnoses, matches, strict=True)
-    ]
-
-
 @agent_node("diagnostician")
 async def diagnostician_agent(state: ClinicalState, ctx: AgentContext) -> dict:
     llm = get_llm()
@@ -188,7 +168,18 @@ async def diagnostician_agent(state: ClinicalState, ctx: AgentContext) -> dict:
     if hypotheses:
         ctx.think("Considering: " + ", ".join(h.condition for h in hypotheses))
 
-    evidence = await _retrieve([search_query(case), *(h.search_query for h in hypotheses)], ctx)
+    # On a re-route, keep the first pass's evidence and only search what is new: queries
+    # already run would return the same abstracts at another ~5 s of search + rerank.
+    previous = state.get("evidence", []) if feedback else []
+    searched = {e.query for e in previous}
+    queries = [
+        q for q in [search_query(case), *(h.search_query for h in hypotheses)] if q not in searched
+    ]
+    if previous:
+        queries = queries[1:]  # the case query was run on the first pass
+    seen = {e.pmid for e in previous}
+    new = await _retrieve(queries, ctx) if queries else []
+    evidence = previous + [e for e in new if e.pmid not in seen]
 
     ctx.think(f"Weighing {len(evidence)} abstracts")
     try:
@@ -219,5 +210,4 @@ async def diagnostician_agent(state: ClinicalState, ctx: AgentContext) -> dict:
     if invalid_total:
         ctx.think(f"Dropped {invalid_total} citation(s) to abstracts that were not retrieved")
 
-    diagnoses = await _code_icd(diagnoses[:MAX_DIAGNOSES], ctx)
-    return {"diagnoses": diagnoses, "evidence": evidence}
+    return {"diagnoses": diagnoses[:MAX_DIAGNOSES], "evidence": evidence}

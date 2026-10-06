@@ -52,7 +52,7 @@ npm run build
 1. The LLM proposes up to 5 hypotheses, each with a PubMed query. On a re-route, the critique's flags and questions are added to both prompts.
 2. The case query plus every hypothesis query go to `services/retrieval.py`. That encodes them with the MedCPT query encoder, calls the `hybrid_search` SQL function per query (pgvector `<#>` inner product + full-text with OR'd terms, RRF-fused), and pools candidates round-robin capped at `rerank_pool`. The cross-encoder scores each candidate against the query that found it, and `evidence_k` abstracts are kept round-robin across queries.
 3. The LLM picks the top 3 citing `[E#]` ids only. Ids not in the retrieved list are dropped in code.
-4. ICD-11 codes are looked up via `services/icd.py`. WHO's `autocode` returns 500 on release 2026-01, so it uses `search` + a qualifier rule ("Dengue fever" must not become "Severe dengue"), with `autocode` on 2025-01 as the fallback.
+4. ICD-11 codes are looked up once, on the final differential, in the report node (`agents/report.py` → `services/icd.py`). WHO's `autocode` returns 500 on release 2026-01, so it uses `search` + a qualifier rule ("Dengue fever" must not become "Severe dengue"), with `autocode` on 2025-01 as the fallback.
 
 Without an LLM there is no differential (empty list). Without retrieval, the diagnoses are uncited.
 - Corpus: 50K abstracts, 130 topics, ~362 MB of the 500 MB free tier. At this size the keyword side of `hybrid_search` must stay bounded (`migrations/002`): it ANDs the terms first, falls back to OR, and ranks at most 300 matches. Ranking all OR matches (~15K rows) took ~7 s on a cold cache and silently blew the retrieval budget. Hybrid queries run in parallel on a 6-connection pool with `statement_timeout=3s`. The ingestion reconnects when the Supabase pooler drops the connection.
@@ -70,7 +70,7 @@ Without an LLM there is no differential (empty list). Without retrieval, the dia
 An unsupported leading diagnosis caps confidence at 0.55, which forces a re-route. Likely treatments are checked against current meds in DDInter (`treatment_cautions`; unknown-severity pairs are dropped). Flags and missed diagnoses reach the re-routed Diagnostician through `_feedback()`. Without an LLM, the deterministic `_rules_review()` is used.
 
 ## Open items
-- **Latency:** single-pass cases take ~8–13 s ✅. **Re-routed cases take ~20–23 s** ❌ (Diagnostician and Critique both run twice; Groq free-tier 429s). The PRD's ≤15 s is met for single passes only. The levers are a cheaper second pass (reuse retrieval, skip ICD), a smaller rerank pool, or a paid Groq tier.
+- **Latency:** single-pass cases take ~8–12 s ✅. **Re-routed cases take ~18.6 s** (down from ~23 s): ICD-11 coding now runs once in the report node, and a re-route reuses the first pass's evidence and only searches new queries. The remaining cost is the second search + rerank (~4–5 s) for the new hypotheses. Further levers trade quality (smaller `rerank_pool`) or money (a paid Groq tier, to avoid 429 retries).
 - **`min_rerank_score = -5` and `SUPPORT_THRESHOLD = 8` are provisional.** Tune both in Phase 6 against labelled relevance (PRD RAG precision ≥0.70).
 - **DDInter has gaps:** e.g. no ACE inhibitor + spironolactone pair. That limits DDI recall; document it for the paper and don't invent pairs.
 - The UI for Phases 3–4 (citations, ICD, critique sections) was verified via the live API and type checks, not in a browser, because the Chrome extension was disconnected.
