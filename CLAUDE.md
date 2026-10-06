@@ -6,12 +6,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A multi-agent clinical decision support system (CDSS) implementing Borkowski et al. (2025), "Multiagent AI Systems in Health Care" (PMC12360800), as a B.Tech capstone. Requirements live in `MedOrchestra_PRD(1).pdf`. Synthetic/open data only — no EHR/FHIR, no clinical deployment. Scope is intentionally capped at **4 agents** (Triage, Diagnostician, Drug Safety, Critique; `report` is an assembly node, not an agent). The Critique agent and its feedback loop are the paper's novel contribution.
 
-Work proceeds in phases; the roadmap and per-phase status are in `README.md`. Phases 1–5 are done: all four agents are real, and runs are persisted with history/replay and PDF export. **Phase 6 (evaluation) is in progress:** 25 of 50 DDXPlus cases are done (Groq free-tier daily token quota). Resume with `python -m eval.run_eval`.
+Work proceeds in phases; the roadmap and per-phase status are in `README.md`. Phases 1–5 are done: all four agents are real, and runs are persisted with history/replay and PDF export. **Phase 6 (evaluation) is in progress — see "Resume here" below.**
 
 **Evaluation** (`backend/eval/`): `ddxplus.py` builds 50 cases (one per DDXPlus class + 1) into `data/ddxplus/cases.jsonl`. `run_eval.py` runs pipeline + single-LLM baseline + LLM judge per case. It is resumable, paces 20 s between cases, retries degraded cases, and `--rejudge` re-scores saved predictions. `ddi_recall.py` handles drug-interaction recall (no Groq). Results are in `eval/results/`.
 - The ablation needs no extra runs: the "no Critique" arm is the Diagnostician's first-pass output, taken from the same run's events.
 - The judge runs on Qwen (a different family from the gpt-oss models it grades) and is given the 49 DDXPlus class names. Without that context it credited "viral URI" for Influenza and failed "allergic rhinitis" for Allergic sinusitis. It still made one lenient error (supraglottitis accepted for laryngitis).
 - **Groq free tier: 8K tokens/min and 200K tokens/day per model.** One evaluated case costs ~15–20K tokens, so ~10–13 cases/day fit on `gpt-oss-120b`.
+
+## Resume here (Phase 6, as of 2026-10-06)
+
+The user chose the free route: finish the remaining 25 of 50 DDXPlus cases across days within Groq's free quota. **Start a fresh session (not `--continue`); everything needed is in this file.**
+
+1. Check the quota: `gpt-oss-120b` allows 200K tokens/day (rolling 24 h) and 8K/min. One case uses ~15–20K tokens, so ~10–12 cases/day fit.
+2. Run in the background: `cd backend; .\.venv\Scripts\python -u -m eval.run_eval`. It resumes, skipping the 25 done cases in `eval/results/cases.jsonl`, and re-runs degraded ones. Progress lines look like `[n/25] ddx-0NN …`. When a case logs repeated `HTTP 429 … tokens per day (TPD)`, stop it (the quota is exhausted) and resume the next day.
+3. After all 50: run `python -m eval.run_eval --summary`, then spot-check misses by hand. **Known judge error to correct in the write-up:** `ddx-002` Acute laryngitis — the final arm's "Acute supraglottitis (acute laryngitis)" was credited, but supraglottitis = epiglottitis, a separate DDXPlus class. Also re-run `python -m eval.ddi_recall --n 150` only if `drug_names.py` changed.
+4. Commit the results, update README Phase 6 → ✅, and summarise the final numbers for the paper.
+
+Interim results (25 cases, Qwen judge): with Critique top-1 68% / top-3 88% (64/84 after the manual correction); no Critique 60/72; single-LLM 64/84. On re-routed cases top-3 went 50% → 79%. Retrieval precision 71%. DDI recall 100% generic / 95% brand. Latency median 14.6 s (52% ≤15 s; single-pass 10.7 s). Calibration proxy r = 0.36. The likely final misses are latency (re-routes) and calibration (the PRD wants physician ratings; ours is a proxy).
 
 ## Commands
 
@@ -78,7 +89,7 @@ An unsupported leading diagnosis caps confidence at 0.55, which forces a re-rout
 - **Latency:** single-pass cases take ~8–12 s ✅. **Re-routed cases take ~18.6 s** (down from ~23 s): ICD-11 coding now runs once in the report node, and a re-route reuses the first pass's evidence and only searches new queries. The remaining cost is the second search + rerank (~4–5 s) for the new hypotheses. Further levers trade quality (smaller `rerank_pool`) or money (a paid Groq tier, to avoid 429 retries).
 - **`min_rerank_score = -5` and `SUPPORT_THRESHOLD = 8` are provisional.** Tune both in Phase 6 against labelled relevance (PRD RAG precision ≥0.70).
 - **DDInter has gaps:** e.g. no ACE inhibitor + spironolactone pair. That limits DDI recall; document it for the paper and don't invent pairs.
-- The UI for Phases 3–5 (citations, ICD, critique sections, Recent cases, PDF export) was verified via the live API and type checks, not in a browser, because the Chrome extension was disconnected.
+- The UI was verified in Brave via Claude-in-Chrome (Phases 3–5). The user still has to check Export PDF, because the print dialog blocks the browser tool. In Brave the extension's ref-based clicks sometimes don't register; JS `element.click()` via `javascript_tool` works.
 - **Supabase space:** the corpus uses ~362 MB of 500 MB, and runs take ~112 kB each (about 1,200 runs of headroom). Prune old runs or trim stored `output` payloads if evaluation needs more.
 - **Skipped on purpose:** Langfuse tracing (the stored event stream already captures every agent step) and server-side PDF generation (browser print-to-PDF via `exportPdf()`, light mode, print CSS).
 
