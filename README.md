@@ -49,7 +49,28 @@ Config: copy `backend/.env.example` → `backend/.env` and add a Groq API key (h
 | 3 | Supabase pgvector + PubMed ingestion (130 topics incl. all DDXPlus conditions), MedCPT embeddings, hybrid search + reranker → hypothesis-driven Diagnostician with validated PubMed citations; ICD-11 coding | ✅ done |
 | 4 | Critique: adversarial LLM review (different model family), cross-encoder citation verification, missed-diagnosis and clarification feedback into the re-route, likely-treatment vs current-medication cautions | ✅ done |
 | 5 | Runs persisted to Supabase (case, report, full event stream), Recent cases panel with timeline replay, print-to-PDF export with case summary | ✅ done |
-| 6 | Evaluation on DDXPlus (top-1/top-3, Critique ablation, single-LLM baseline, retrieval precision, latency, calibration proxy) and DDI recall via brand names — results in `backend/eval/results/` | ⏳ 25/50 cases |
+| 6 | Evaluation on DDXPlus (top-1/top-3, Critique ablation, single-LLM baseline, retrieval precision, latency, calibration proxy) and DDI recall via brand names — results in `backend/eval/results/` | ✅ 44/50 cases (Groq free-tier quota) |
+
+## Evaluation results
+
+DDXPlus, 44 of 50 planned cases (one per pathology class). The other 6 were not run, because of Groq's free-tier limit of 200K tokens/day per model. The judge is Qwen, a different model family from the gpt-oss models it grades, and it is given the 49 DDXPlus class names. Numbers include one manual judge correction (`ddx-002`: supraglottitis was credited for laryngitis). Raw data: `backend/eval/results/cases.jsonl`.
+
+| Metric | Result | PRD target |
+|---|---|---|
+| Top-1 / Top-3, MedOrchestra (with Critique) | 57% / 70% | ≥65% / ≥80% |
+| Ablation, no Critique (first pass) | 57% / 66% | — |
+| Baseline, single LLM call | 55% / 75% | — |
+| Re-routed cases (26/44), top-3 before → after the Critique | 50% → 58% | — |
+| Retrieval precision (LLM-judged) | 72% | ≥70% ✅ |
+| DDI recall, generic / US brand names (150 DDInter pairs) | 100% / 95% | ≥80% ✅ |
+| Latency, median (clean first attempts) | 15.1 s (49% ≤15 s; single-pass 9.9 s) | ≤15 s |
+| Critique calibration (proxy: confidence vs top-1 correctness) | r = 0.47 | r ≥0.6 (vs physician ratings) |
+
+Findings:
+- **The Critique mostly helps but sometimes overrides correct answers.** It improves top-3 on re-routed cases. In 2 cases (pulmonary neoplasm, SLE), though, the first pass had the right #1 and the re-routed pass dropped it after a 0.1-confidence review. In 2 others (myocarditis, pneumonia) the re-route changed nothing. The likely cause is that the feedback is framed as "rejected the previous differential", which pushes a full rewrite. Planned fix: "revise" wording that keeps strong candidates.
+- **The models favour dangerous diagnoses over a benign correct label** (stable angina → ACS; myocarditis → pericarditis/ACS). That is clinically defensible but costs top-k accuracy. Some DDXPlus labels are symptom-level (e.g. "Localized edema").
+- **Latency is driven by Groq free-tier 429 retries and by re-routes** (a second search and rerank), not by local compute.
+- **Limitations:** an LLM judge rather than physicians; the calibration measure is a proxy; 44 cases is a small sample; DDInter has coverage gaps (e.g. no ACE inhibitor + spironolactone pair). The harness flags a case as degraded only when a whole agent falls back, not when a single call is served by the fallback model.
 
 ## Data sources & licences
 

@@ -13,16 +13,25 @@ Work proceeds in phases; the roadmap and per-phase status are in `README.md`. Ph
 - The judge runs on Qwen (a different family from the gpt-oss models it grades) and is given the 49 DDXPlus class names. Without that context it credited "viral URI" for Influenza and failed "allergic rhinitis" for Allergic sinusitis. It still made one lenient error (supraglottitis accepted for laryngitis).
 - **Groq free tier: 8K tokens/min and 200K tokens/day per model.** One evaluated case costs ~15–20K tokens, so ~10–13 cases/day fit on `gpt-oss-120b`.
 
-## Resume here (Phase 6, as of 2026-10-06)
+## Resume here (Phase 6, as of 2026-10-07)
 
-The user chose the free route: finish the remaining 25 of 50 DDXPlus cases across days within Groq's free quota. **Start a fresh session (not `--continue`); everything needed is in this file.**
+The user chose the free route: finish the 50 DDXPlus cases across days within Groq's free quota. **Start a fresh session (not `--continue`); everything needed is in this file.** 44 of 50 cases are done. Remaining: `ddx-045`–`ddx-049` plus `ddx-044` (saved as degraded, re-runs automatically). That fits in one day.
 
-1. Check the quota: `gpt-oss-120b` allows 200K tokens/day (rolling 24 h) and 8K/min. One case uses ~15–20K tokens, so ~10–12 cases/day fit.
-2. Run in the background: `cd backend; .\.venv\Scripts\python -u -m eval.run_eval`. It resumes, skipping the 25 done cases in `eval/results/cases.jsonl`, and re-runs degraded ones. Progress lines look like `[n/25] ddx-0NN …`. When a case logs repeated `HTTP 429 … tokens per day (TPD)`, stop it (the quota is exhausted) and resume the next day.
+**Run in WSL, not Windows.** Windows Smart App Control switched to enforce mode on 2026-10-07 and blocks torch's unsigned `c10.dll`, so MedCPT and retrieval can't load in `backend/.venv`. WSL (Ubuntu 24.04) has a venv at `~/mo-venv`, created with `uv` because Ubuntu has no `python3-venv` and no sudo was used. It pins Python 3.14, torch 2.14.1+cpu and transformers 5.18.0 to match the Windows venv, and runs on the repo in place (no editable install; `-m` from `backend/` finds `app`). All 81 tests pass there.
+
+1. Check the quota: each of `gpt-oss-120b` and Qwen allows 200K tokens/day (rolling 24 h) and 8K/min. On 2026-10-07, 20 cases (including retries) used up both. **A tiny probe request succeeds even when the daily quota is exhausted.** Groq only rejects requests larger than the remaining daily quota, and `llm.py` logs just `HTTP 429` without the reason. To see the real limit, send a ~4K-token request with `max_tokens: 1` and read `"message"` (it says `tokens per day (TPD): … Used …`).
+2. Run in the background: `wsl -- bash -lc "cd /mnt/c/MedOrchestra/backend && ~/mo-venv/bin/python -u -m eval.run_eval > <log> 2>&1"`. It resumes and re-runs degraded cases. Progress lines look like `[n/N] ddx-0NN …`. Repeated `degraded … retrying` or `attempt N error: … HTTP 429` usually means the daily quota is gone: probe as in step 1, then stop it. Stopping the `wsl` wrapper may leave the Python process running inside Linux, so check with `wsl -- ps -eo pid,args`.
 3. After all 50: run `python -m eval.run_eval --summary`, then spot-check misses by hand. **Known judge error to correct in the write-up:** `ddx-002` Acute laryngitis — the final arm's "Acute supraglottitis (acute laryngitis)" was credited, but supraglottitis = epiglottitis, a separate DDXPlus class. Also re-run `python -m eval.ddi_recall --n 150` only if `drug_names.py` changed.
 4. Commit the results, update README Phase 6 → ✅, and summarise the final numbers for the paper.
 
 Interim results (25 cases, Qwen judge): with Critique top-1 68% / top-3 88% (64/84 after the manual correction); no Critique 60/72; single-LLM 64/84. On re-routed cases top-3 went 50% → 79%. Retrieval precision 71%. DDI recall 100% generic / 95% brand. Latency median 14.6 s (52% ≤15 s; single-pass 10.7 s). Calibration proxy r = 0.36. The likely final misses are latency (re-routes) and calibration (the PRD wants physician ratings; ours is a proxy).
+
+Interim results at 44 cases (`eval/results/summary.md`): with Critique top-1 59% / top-3 73% (70% after the ddx-002 correction); no Critique 57/66; single-LLM 55/75. Re-routed cases top-3 50% → 62%. Retrieval precision 72%. Latency median 15.1 s (49% ≤15 s). Calibration proxy r = 0.47. Cases 26–44 ran in WSL. End-to-end latency is the same in both environments (median 14.6 s Windows vs 15.4 s WSL, clean first attempts), because 429 retries dominate, so they are reported together. The user presented on 2026-10-08 with these 44 cases, and README "Evaluation results" holds the presented numbers. The re-route wording fix was deliberately not made before the presentation. Findings from day 2 to write up:
+- **The Critique hurt two cases:** `ddx-037` pulmonary neoplasm and `ddx-038` SLE. In both, the first pass had the right answer at #1, the Critique gave 0.1 confidence, and the re-routed pass dropped it. The likely cause is the re-route prompt "A senior reviewer **rejected** the previous differential" (`diagnostician.py:86`), which pushes the model to replace everything. The obvious fix is "revise" wording that keeps strong candidates. It was not changed mid-eval, so all 50 cases measure one system.
+- **The Critique helped:** `ddx-040` scombroid (only the final arm got it).
+- **Re-routes that changed nothing:** `ddx-029` myocarditis and `ddx-034` pneumonia (the second pass repeated the first; the baseline had pneumonia).
+- **Bias toward dangerous diagnoses:** the models put ACS/PE/dissection ahead of the benign correct label (`ddx-043` stable angina, `ddx-029` myocarditis). `ddx-027` "Localized edema" is a symptom-level label.
+- **Eval blind spot:** `degraded` doesn't flag a failed hypothesis step on a re-route, or a call served by `llm_fallback_model`. Note it as a limitation.
 
 ## Commands
 
