@@ -4,7 +4,7 @@ Multi-agent clinical decision support research prototype (B.Tech capstone). Four
 
 > Research prototype on synthetic/open data. Not for clinical use.
 
-See `MedOrchestra_PRD(1).pdf` for the original requirements.
+See `MedOrchestra_PRD(1).pdf` for the original requirements and [`docs/PROJECT_OVERVIEW.md`](docs/PROJECT_OVERVIEW.md) for a detailed walkthrough of the design, implementation and evaluation.
 
 ## Stack
 
